@@ -311,12 +311,10 @@ const Tracker = GObject.registerClass(
             // Remove UI elements from the Map
             this._timerUIElements.delete(timer.id);
 
-            // Remove the menu item from the menu section
-            this._timersSection.removeMenuItem(timerItem);
+            // Destroy the menu item to remove it from the menu
+            timerItem.destroy();
 
-            // Do NOT call timerItem.destroy(), as removeMenuItem already destroys it
-            // timerItem.destroy();
-
+            // Update the panel label and save timers
             this._updatePanelLabel();
             this._saveTimers();
         }
@@ -504,7 +502,7 @@ const Tracker = GObject.registerClass(
         _formatTime(seconds) {
             let hrs = Math.floor(seconds / 3600).toString().padStart(2, '0');
             let mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
-            let secs = (seconds % 60).toString().padStart(2, '0');
+            let secs = Math.floor(seconds % 60).toString().padStart(2, '0');
             return `${hrs}:${mins}:${secs}`;
         }
 
