@@ -73,7 +73,10 @@ const Tracker = GObject.registerClass(
             this._totalTimeLabel = new St.Label({text: 'Total Time: 00:00:00', x_expand: true});
             totalTimeItem.add_child(this._totalTimeLabel);
 
-            this._totalTimeEyeIcon = new St.Icon({icon_name: 'view-hidden-symbolic', style_class: 'popup-menu-icon'});
+            this._totalTimeEyeIcon = new St.Icon({
+                icon_name: 'radio-symbolic',
+                style_class: 'timer-icon',
+            });
             this._totalTimeEyeButton = new St.Button({child: this._totalTimeEyeIcon});
             this._totalTimeEyeButton.connect('clicked', () => {
                 this._toggleTotalTimeSelection();
@@ -102,7 +105,10 @@ const Tracker = GObject.registerClass(
             let buttonsBox = new St.BoxLayout({x_expand: true});
 
             // Pause all timers button
-            let pauseAllIcon = new St.Icon({icon_name: 'media-playback-pause-symbolic'});
+            let pauseAllIcon = new St.Icon({
+                icon_name: 'media-playback-pause-symbolic',
+                style_class: 'timer-icon',
+            });
             let pauseAllButton = new St.Button({child: pauseAllIcon});
             pauseAllButton.connect('clicked', () => {
                 this._pauseAllTimers();
@@ -110,7 +116,10 @@ const Tracker = GObject.registerClass(
             buttonsBox.add_child(pauseAllButton);
 
             // Add new timer button
-            let addIcon = new St.Icon({icon_name: 'list-add-symbolic'});
+            let addIcon = new St.Icon({
+                icon_name: 'list-add-symbolic',
+                style_class: 'timer-icon',
+            });
             let addButton = new St.Button({child: addIcon});
             addButton.connect('clicked', () => {
                 this._addNewTimer();
@@ -122,30 +131,49 @@ const Tracker = GObject.registerClass(
         }
 
         _addTimerItem(timer) {
-            let timerItem = new PopupMenu.PopupBaseMenuItem();
+            let timerItem = new PopupMenu.PopupBaseMenuItem({
+                style_class: 'timer-item',
+            });
 
             // Eye icon
-            let eyeIcon = new St.Icon({icon_name: timer.selected ? 'view-visible-symbolic' : 'view-hidden-symbolic'});
+            let eyeIcon = new St.Icon({
+                icon_name: timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic',
+                style_class: 'timer-icon',
+                // icon_size: 24,
+            });
             let eyeButton = new St.Button({child: eyeIcon});
             eyeButton.connect('clicked', () => {
                 timer.selected = !timer.selected;
-                eyeIcon.icon_name = timer.selected ? 'view-visible-symbolic' : 'view-hidden-symbolic';
+                eyeIcon.icon_name = timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic';
                 this._updatePanelLabel();
                 this._saveTimers();
             });
             timerItem.add_child(eyeButton);
 
             // Timer name
-            let nameLabel = new St.Label({text: timer.name, x_expand: true});
+            let nameLabel = new St.Label({
+                text: timer.name,
+                x_expand: true,
+                style_class: 'timer-text',
+            });
             timerItem.add_child(nameLabel);
 
             // Timer time
-            let timeLabel = new St.Label({text: this._formatTime(timer.timeElapsed)});
+            let timeLabel = new St.Label({
+                text: this._formatTime(timer.timeElapsed),
+                style_class: 'timer-time',
+            });
             timerItem.add_child(timeLabel);
 
             // Play/Pause button
             let iconName = timer.running ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
-            let playPauseButton = new St.Button({child: new St.Icon({icon_name: iconName})});
+
+            let playPauseIcon = new St.Icon({
+                icon_name: iconName,
+                style_class: 'timer-icon play-button',
+                // icon_size: 24,
+            });
+            let playPauseButton = new St.Button({child: playPauseIcon});
 
             // Update the click handler
             playPauseButton.connect('clicked', () => {
@@ -158,28 +186,48 @@ const Tracker = GObject.registerClass(
                     timer.startTime = null;
 
                     // Update icon to "Play"
-                    playPauseButton.set_child(new St.Icon({icon_name: 'media-playback-start-symbolic'}));
+                    playPauseButton.set_child(new St.Icon({
+                        icon_name: 'media-playback-start-symbolic',
+                        style_class: 'timer-icon play-button',
+                    }));
+                    timerItem.add_style_class_name('timer-paused');
                 } else {
                     // Start timer
                     timer.running = true;
                     timer.startTime = GLib.get_real_time();
 
                     // Update icon to "Pause"
-                    playPauseButton.set_child(new St.Icon({icon_name: 'media-playback-pause-symbolic'}));
+                    playPauseButton.set_child(new St.Icon({
+                        icon_name: 'media-playback-pause-symbolic',
+                        style_class: 'timer-icon',
+                    }));
+                    timerItem.remove_style_class_name('timer-paused');
                 }
                 this._saveTimers();
             });
             timerItem.add_child(playPauseButton);
 
             // Edit button
-            let editButton = new St.Button({child: new St.Icon({icon_name: 'document-edit-symbolic'})});
+            let editButton = new St.Button({
+                child: new St.Icon({
+                    icon_name: 'document-edit-symbolic',
+                    style_class: 'timer-icon',
+                    // icon_size: 24,
+                })
+            });
             editButton.connect('clicked', () => {
                 this._editTimer(timer);
             });
             timerItem.add_child(editButton);
 
             // Delete button
-            let deleteButton = new St.Button({child: new St.Icon({icon_name: 'user-trash-symbolic'})});
+            let deleteButton = new St.Button({
+                child: new St.Icon({
+                    icon_name: 'user-trash-symbolic',
+                    style_class: 'timer-icon',
+                    // icon_size: 24,
+                })
+            });
             deleteButton.connect('clicked', () => {
                 this._removeTimer(timer, timerItem);
             });
@@ -192,6 +240,11 @@ const Tracker = GObject.registerClass(
             timerItem.actor.connect('leave-event', () => {
                 timerItem.actor.remove_style_pseudo_class('highlighted');
             });
+
+            // Apply 'timer-paused' class if the timer is paused
+            if (!timer.running) {
+                timerItem.add_style_class_name('timer-paused');
+            }
 
             this._timersSection.addMenuItem(timerItem);
 
@@ -227,9 +280,15 @@ const Tracker = GObject.registerClass(
             entryParent.replace_child(nameLabel, entry);
 
             // Create Save and Cancel buttons
-            let saveIcon = new St.Icon({icon_name: 'document-save-symbolic'});
+            let saveIcon = new St.Icon({
+                icon_name: 'document-save-symbolic',
+                style_class: 'timer-icon',
+            });
             let saveButton = new St.Button({child: saveIcon});
-            let cancelIcon = new St.Icon({icon_name: 'process-stop-symbolic'});
+            let cancelIcon = new St.Icon({
+                icon_name: 'process-stop-symbolic',
+                style_class: 'timer-icon',
+            });
             let cancelButton = new St.Button({child: cancelIcon});
 
             // Add the Save and Cancel buttons to the timer item
@@ -289,12 +348,12 @@ const Tracker = GObject.registerClass(
             // Handle Enter key press on the entry field
             entry.clutter_text.connect('activate', saveTimerName);
 
-    // Auto-focus the entry field after a slight delay
-    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
-        if (entry && entry.get_stage()) {
-                entry.grab_key_focus();
-        }
-        return GLib.SOURCE_REMOVE;
+            // Auto-focus the entry field after a slight delay
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
+                if (entry && entry.get_stage()) {
+                    entry.grab_key_focus();
+                }
+                return GLib.SOURCE_REMOVE;
             });
 
             // Store the edit mode state and entry field
@@ -350,11 +409,18 @@ const Tracker = GObject.registerClass(
                 if (uiElements) {
                     if (uiElements.playPauseButton) {
                         // Update icon to "Play"
-                        let icon = new St.Icon({icon_name: 'media-playback-start-symbolic'});
+                        let icon = new St.Icon({
+                            icon_name: 'media-playback-start-symbolic',
+                            style_class: 'timer-icon play-button',
+                        });
                         uiElements.playPauseButton.set_child(icon);
                     }
                     if (uiElements.timeLabel) {
                         uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
+                    }
+                    if (uiElements.item) {
+                        // Add 'timer-paused' class
+                        uiElements.item.add_style_class_name('timer-paused');
                     }
                 } else {
                     // Log a warning if UI elements are missing
@@ -366,7 +432,7 @@ const Tracker = GObject.registerClass(
 
         _toggleTotalTimeSelection() {
             this._totalTimeSelected = !this._totalTimeSelected;
-            this._totalTimeEyeIcon.icon_name = this._totalTimeSelected ? 'view-visible-symbolic' : 'view-hidden-symbolic';
+            this._totalTimeEyeIcon.icon_name = this._totalTimeSelected ? 'selection-mode-symbolic' : 'radio-symbolic';
             if (this._totalTimeSelected) {
                 // Deselect all individual timers
                 this._timers.forEach(timer => {
@@ -376,7 +442,7 @@ const Tracker = GObject.registerClass(
                     let uiElements = this._timerUIElements.get(timer.id);
                     if (uiElements && uiElements.eyeButton) {
                         // Update the eye icon to 'hidden'
-                        uiElements.eyeButton.child.icon_name = 'view-hidden-symbolic';
+                        uiElements.eyeButton.child.icon_name = 'radio-symbolic';
                     }
                 });
             }
@@ -535,4 +601,10 @@ export default class TrackerExtension extends Extension {
             this._indicator = null;
         }
     }
+}
+
+function _loadStylesheet() {
+    let themeContext = St.ThemeContext.get_for_stage(global.stage);
+    let customCss = Gio.file_new_for_path(`${Me.path}/stylesheet.css`);
+    themeContext.get_theme().load_stylesheet(customCss);
 }
