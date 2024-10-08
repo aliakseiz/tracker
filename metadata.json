@@ -1,0 +1,8 @@
+{
+    "uuid": "tracker@aliakseiz.github.com",
+    "name": "Tracker",
+    "description": "A simple to-do list extension with time tracking functionality for Gnome Shell",
+    "version": 1,
+    "shell-version": ["45","46"],
+    "url": "https://github.com/aliakseiz/tracker"
+}
