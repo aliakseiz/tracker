@@ -1,14 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-    <schema id="org.gnome.shell.extensions.task-time-tracker" path="/org/gnome/shell/extensions/task-time-tracker/">
-      <key name="items" type="aa{ss}">
-          <default>[]</default>
-          <summary>List of tasks</summary>
-          <description>Persistent list of tasks with their times</description>
-      </key>
+    <schema id="org.gnome.shell.extensions.tracker" path="/org/gnome/shell/extensions/tracker/">
+        <key name="timers" type="as">
+            <default>[]</default>
+            <summary>List of timers</summary>
+            <description>JSON-encoded list of timers.</description>
+        </key>
     </schema>
 </schemalist>
-
-
-
-

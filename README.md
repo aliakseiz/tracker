@@ -29,4 +29,14 @@ The timers states should be persistent between the shell restarts and screen loc
 * * *
 
 Debug with:
+```shell
 dbus-run-session -- gnome-shell --nested --wayland
+```
+
+* * *
+
+Compile schemas:
+```shell
+glib-compile-schemas schemas/
+```
+
