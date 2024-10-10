@@ -29,3 +29,12 @@
 .summary-row {
     color: lightgrey;
 }
+
+.timer-label-container {
+    padding-right: 10px;
+}
+
+.timer-label-container:hover {
+    cursor: pointer;
+    background-color: rgba(255, 255, 255, 0.1);
+}

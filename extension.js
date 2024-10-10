@@ -167,13 +167,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _addTimerItem(timer) {
         let timerItem = new PopupMenu.PopupBaseMenuItem({
             style_class: 'timer-item',
+            activate: false, // Prevent the menu from closing when the item is activated
         });
 
         // Eye icon
         let eyeIcon = new St.Icon({
             icon_name: timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic',
             style_class: 'timer-icon',
-            // icon_size: 24,
         });
         let eyeButton = new St.Button({child: eyeIcon});
         eyeButton.connect('clicked', () => {
@@ -190,14 +190,29 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             x_expand: true,
             style_class: 'timer-text',
         });
-        timerItem.add_child(nameLabel);
 
         // Timer time
         let timeLabel = new St.Label({
             text: this._formatTime(timer.timeElapsed),
             style_class: 'timer-time',
         });
-        timerItem.add_child(timeLabel);
+
+        // Create a container for nameLabel and timeLabel
+        let labelContainer = new St.BoxLayout({
+            vertical: false,
+            x_expand: true,
+            reactive: true,        // Make it clickable
+            can_focus: true,
+            track_hover: true,
+            style_class: 'timer-label-container',
+        });
+
+        // Add nameLabel and timeLabel to the container
+        labelContainer.add_child(nameLabel);
+        labelContainer.add_child(timeLabel);
+
+        // Add the container to the timerItem
+        timerItem.add_child(labelContainer);
 
         // Play/Pause button
         let iconName = timer.running ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
@@ -205,12 +220,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let playPauseIcon = new St.Icon({
             icon_name: iconName,
             style_class: 'timer-icon play-button',
-            // icon_size: 24,
         });
         let playPauseButton = new St.Button({child: playPauseIcon});
 
-        // Update the click handler
-        playPauseButton.connect('clicked', () => {
+        // Function to toggle the timer state
+        const toggleTimerState = () => {
             if (timer.running) {
                 // Pause timer
                 let currentTime = GLib.get_real_time();
@@ -220,10 +234,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.startTime = null;
 
                 // Update icon to "Play"
-                playPauseButton.set_child(new St.Icon({
-                    icon_name: 'media-playback-start-symbolic',
-                    style_class: 'timer-icon play-button',
-                }));
+                playPauseIcon.icon_name = 'media-playback-start-symbolic';
                 timerItem.add_style_class_name('timer-paused');
             } else {
                 // Start timer
@@ -231,14 +242,29 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.startTime = GLib.get_real_time();
 
                 // Update icon to "Pause"
-                playPauseButton.set_child(new St.Icon({
-                    icon_name: 'media-playback-pause-symbolic',
-                    style_class: 'timer-icon',
-                }));
+                playPauseIcon.icon_name = 'media-playback-pause-symbolic';
                 timerItem.remove_style_class_name('timer-paused');
             }
             this._saveTimers();
+        };
+
+        // Connect the click handler to the Play/Pause button
+        playPauseButton.connect('clicked', () => {
+            toggleTimerState();
         });
+
+        // Connect the click handler to the label container
+        labelContainer.connect('button-press-event', (actor, event) => {
+            // Prevent the menu from closing
+            // event.stop_propagation();
+
+            // Toggle the timer state
+            toggleTimerState();
+
+            // Prevent the menu from closing by stopping event propagation
+            return Clutter.EVENT_STOP;
+        });
+
         timerItem.add_child(playPauseButton);
 
         // Edit button
@@ -246,7 +272,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             child: new St.Icon({
                 icon_name: 'document-edit-symbolic',
                 style_class: 'timer-icon',
-                // icon_size: 24,
             })
         });
         editButton.connect('clicked', () => {
@@ -259,7 +284,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             child: new St.Icon({
                 icon_name: 'user-trash-symbolic',
                 style_class: 'timer-icon',
-                // icon_size: 24,
             })
         });
         deleteButton.connect('clicked', () => {
@@ -289,6 +313,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             timeLabel: timeLabel,
             eyeButton: eyeButton,
             playPauseButton: playPauseButton,
+            playPauseIcon: playPauseIcon, // Add this to update the icon elsewhere
             editButton: editButton,
             deleteButton: deleteButton
         });
@@ -443,11 +468,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             if (uiElements) {
                 if (uiElements.playPauseButton) {
                     // Update icon to "Play"
-                    let icon = new St.Icon({
-                        icon_name: 'media-playback-start-symbolic',
-                        style_class: 'timer-icon play-button',
-                    });
-                    uiElements.playPauseButton.set_child(icon);
+                    uiElements.playPauseIcon.icon_name = 'media-playback-start-symbolic';
                 }
                 if (uiElements.timeLabel) {
                     uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
