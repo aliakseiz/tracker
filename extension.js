@@ -275,8 +275,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             })
         });
         editButton.connect('clicked', () => {
+            // Pause the timer if it's running
+            if (timer.running) {
+                this._pauseTimer(timer);
+            }
             this._editTimer(timer);
         });
+
         timerItem.add_child(editButton);
 
         // Delete button
@@ -319,24 +324,80 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
     }
 
+_pauseTimer(timer) {
+    let uiElements = this._timerUIElements.get(timer.id);
+
+        let currentTime = GLib.get_real_time();
+        let elapsed = (currentTime - timer.startTime) / 1000000;
+        timer.timeElapsed += elapsed;
+        timer.running = false;
+        timer.startTime = null;
+
+        // Update UI
+        if (uiElements && uiElements.playPauseIcon) {
+            uiElements.playPauseIcon.icon_name = 'media-playback-start-symbolic';
+        }
+    if (uiElements && uiElements.item) {
+            uiElements.item.add_style_class_name('timer-paused');
+        }
+    }
+
+    _parseTimeInput(timeString) {
+        // Match hh:mm:ss or mm:ss or ss
+        let regex = /^(\d{1,2}:)?(\d{1,2}:)?\d{1,2}$/;
+        if (!regex.test(timeString)) {
+            return null;
+        }
+
+        let parts = timeString.split(':').map(Number).reverse();
+        let seconds = 0;
+
+        if (parts.length >= 1) {
+            seconds += parts[0];
+        }
+        if (parts.length >= 2) {
+            seconds += parts[1] * 60;
+        }
+        if (parts.length >= 3) {
+            seconds += parts[2] * 3600;
+        }
+
+        return seconds;
+    }
+
 
     _editTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
         let {item, nameLabel, timeLabel, eyeButton, playPauseButton, editButton, deleteButton} = uiElements;
 
-        // Hide the Eye, Play/Pause, Edit, and Delete buttons, and the time label
+    // Hide the Eye, Play/Pause, Edit, and Delete buttons
         eyeButton.hide();
         playPauseButton.hide();
         editButton.hide();
         deleteButton.hide();
-        timeLabel.hide();
 
         // Create an entry field to edit the timer name
-        let entry = new St.Entry({text: timer.name});
-        let entryParent = nameLabel.get_parent();
+    let nameEntry = new St.Entry({
+        text: timer.name,
+        x_expand: true,
+        style_class: 'timer-entry',
+        hint_text: 'Timer Name',
+    });
 
-        // Replace the name label with the entry field
-        entryParent.replace_child(nameLabel, entry);
+    // Create an entry field to edit the timer value
+    let timeEntry = new St.Entry({
+        text: this._formatTime(timer.timeElapsed),
+        x_expand: true,
+        style_class: 'timer-entry',
+        hint_text: 'Time (hh:mm:ss)',
+    });
+
+    // Replace the nameLabel and timeLabel with the entry fields
+    let nameEntryParent = nameLabel.get_parent();
+    nameEntryParent.replace_child(nameLabel, nameEntry);
+
+    let timeEntryParent = timeLabel.get_parent();
+    timeEntryParent.replace_child(timeLabel, timeEntry);
 
         // Create Save and Cancel buttons
         let saveIcon = new St.Icon({
@@ -354,12 +415,27 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         item.add_child(saveButton);
         item.add_child(cancelButton);
 
-        // Helper function to save the timer name
-        const saveTimerName = () => {
-            timer.name = entry.get_text();
-            // Replace the entry with the updated name label
-            entryParent.replace_child(entry, nameLabel);
+    // Helper function to save the timer name and value
+    const saveTimer = () => {
+        timer.name = nameEntry.get_text();
+
+        // Parse the time input
+        let timeText = timeEntry.get_text();
+        let newTimeElapsed = this._parseTimeInput(timeText);
+        if (newTimeElapsed !== null) {
+            timer.timeElapsed = newTimeElapsed;
+        } else {
+            // Invalid time input, show an error (optional)
+            Main.notifyError('Invalid Time Format', 'Please enter time in hh:mm:ss format.');
+            return;
+        }
+
+        // Replace the entries with the updated labels
+        nameEntryParent.replace_child(nameEntry, nameLabel);
             nameLabel.text = timer.name;
+
+        timeEntryParent.replace_child(timeEntry, timeLabel);
+        timeLabel.text = this._formatTime(timer.timeElapsed);
 
             // Remove Save and Cancel buttons
             item.remove_child(saveButton);
@@ -370,19 +446,19 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             playPauseButton.show();
             editButton.show();
             deleteButton.show();
-            timeLabel.show();
 
             // Reset the editing state
             timer.isEditing = false;
-            timer.editEntry = null;
+        timer.editEntries = null;
 
             this._saveTimers();
         };
 
         // Helper function to cancel editing
         const cancelEdit = () => {
-            // Replace the entry with the original name label
-            entryParent.replace_child(entry, nameLabel);
+        // Replace the entries with the original labels
+        nameEntryParent.replace_child(nameEntry, nameLabel);
+        timeEntryParent.replace_child(timeEntry, timeLabel);
 
             // Remove Save and Cancel buttons
             item.remove_child(saveButton);
@@ -393,31 +469,32 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             playPauseButton.show();
             editButton.show();
             deleteButton.show();
-            timeLabel.show();
 
             // Reset the editing state
             timer.isEditing = false;
-            timer.editEntry = null;
+        timer.editEntries = null;
         };
 
         // Connect signals for the Save and Cancel buttons
-        saveButton.connect('clicked', saveTimerName);
+    saveButton.connect('clicked', saveTimer);
         cancelButton.connect('clicked', cancelEdit);
 
-        // Handle Enter key press on the entry field
-        entry.clutter_text.connect('activate', saveTimerName);
+    // Handle Enter key press on the timeEntry field
+    timeEntry.clutter_text.connect('activate', saveTimer);
+    // Handle Enter key press on the nameEntry field
+    nameEntry.clutter_text.connect('activate', saveTimer);
 
-        // Auto-focus the entry field after a slight delay
+    // Auto-focus the nameEntry field after a slight delay
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
-            if (entry && entry.get_stage()) {
-                entry.grab_key_focus();
+        if (nameEntry && nameEntry.get_stage()) {
+            nameEntry.grab_key_focus();
             }
             return GLib.SOURCE_REMOVE;
         });
 
-        // Store the edit mode state and entry field
+    // Store the edit mode state and entry fields
         timer.isEditing = true;
-        timer.editEntry = entry;
+    timer.editEntries = { nameEntry, timeEntry };
         timer.saveButton = saveButton;
         timer.cancelButton = cancelButton;
     }
