@@ -1,36 +1,31 @@
 .timer-icon {
-    width: 16px;
-    height: 16px;
+    width: 1em;
+    height: 1em;
+    padding-right: 1em;
 }
 
 .timer-paused .timer-text,
 .timer-paused .timer-time,
 .timer-paused .timer-icon {
     color: grey;
-    /*opacity: 0.5;*/
 }
 
-/* Keep the Play button icon white when paused */
-.timer-paused .timer-icon.play-button {
-    /*opacity: 1.0;*/
-    color: white;
-}
-/* Fix timer text width */
 .timer-text {
-    min-width: 3em; /* Adjust as needed */
+    min-width: 3em;
     max-width: 20em;
     text-align: left;
-    /*font-family: monospace;*/
 }
 
 .timer-time {
     width: 4.5em;
     text-align: left;
-    /*font-family: monospace;*/
 }
 
-/* Fix timer item width to prevent menu resizing */
 .timer-item {
     min-width: 10em;
     max-width: 30em;
+}
+
+.summary-row {
+    color: lightgrey;
 }
