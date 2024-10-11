@@ -241,8 +241,15 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _resetAllTimers() {
+        let currentTime = GLib.get_real_time();
+
         this._timers.forEach(timer => {
             timer.timeElapsed = 0;
+
+            // If the timer is running, reset the startTime to current time
+            if (timer.running) {
+                timer.startTime = currentTime;
+            }
 
             // Update UI
             let uiElements = this._timerUIElements.get(timer.id);
@@ -450,6 +457,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
     _resetTimer(timer) {
         timer.timeElapsed = 0;
+
+        // If the timer is running, reset the startTime to current time
+        if (timer.running) {
+            timer.startTime = GLib.get_real_time();
+        }
 
         // Update UI
         let uiElements = this._timerUIElements.get(timer.id);
