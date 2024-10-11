@@ -56,6 +56,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._timerUIElements = new Map();
 
+        this._totalTimeSelected = true; // Default to total time selected
         this._loadTimers();
 
         this._buildMenu();
@@ -64,24 +65,82 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._onMenuClosed();
         });
 
+        this._screenLockSignal = Main.screenShield.connect('locked', () => {
+            this._onScreenLocked();
+        });
+
         this._startTimers();
     }
+
+    _resetEditingState(timer) {
+        let uiElements = this._timerUIElements.get(timer.id);
+        if (!uiElements) {
+            log(`Error: UI elements not found for timer "${timer.name}"`);
+            return;
+        }
+
+        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, editButton, deleteButton} = uiElements;
+        let nameEntry = timer.editEntries?.nameEntry;
+        let timeEntry = timer.editEntries?.timeEntry;
+        let saveButton = timer.saveButton;
+        let cancelButton = timer.cancelButton;
+
+        // Replace the entries with the original labels
+        if (nameEntry && nameEntry.get_parent) {
+            let nameEntryParent = nameEntry.get_parent();
+            if (nameEntryParent && nameEntryParent.contains(nameEntry)) {
+                nameEntryParent.replace_child(nameEntry, nameLabel);
+            }
+        }
+
+        if (timeEntry && timeEntry.get_parent) {
+            let timeEntryParent = timeEntry.get_parent();
+            if (timeEntryParent && timeEntryParent.contains(timeEntry)) {
+                timeEntryParent.replace_child(timeEntry, timeLabel);
+            }
+        }
+
+        // Remove Save and Cancel buttons
+        if (saveButton && item.contains(saveButton)) {
+            item.remove_child(saveButton);
+        }
+        if (cancelButton && item.contains(cancelButton)) {
+            item.remove_child(cancelButton);
+        }
+
+        // Show the previously hidden elements
+        eyeButton.show();
+        playPauseButton.show();
+        editButton.show();
+        deleteButton.show();
+        timeLabel.show();
+
+        // Reset the editing state
+        timer.isEditing = false;
+        timer.editEntries = null;
+        timer.saveButton = null;
+        timer.cancelButton = null;
+    }
+
 
     _loadTimers() {
         let currentTime = GLib.get_real_time();
         let timersData = this._settings.get_strv('timers');
-        this._timers = timersData.map(data => {
-            let timer = JSON.parse(data);
-            if (!timer.id) {
-                timer.id = GLib.uuid_string_random();
-            }
-            if (timer.running) {
-                // Set startTime to current time
-                timer.startTime = currentTime;
+        this._timers = [];
+        this._totalTimeSelected = true; // Default value
+
+        timersData.forEach(data => {
+            let item = JSON.parse(data);
+            if (item.id === 'settings') {
+                this._totalTimeSelected = item.totalTimeSelected !== undefined ? item.totalTimeSelected : true;
             } else {
+                let timer = item;
+                if (!timer.id) {
+                    timer.id = GLib.uuid_string_random();
+                }
                 timer.startTime = null;
+                this._timers.push(timer);
             }
-            return timer;
         });
     }
 
@@ -92,6 +151,14 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             delete timerCopy.startTime;
             return JSON.stringify(timerCopy);
         });
+
+        // Add settings data
+        let settingsData = {
+            id: 'settings',
+            totalTimeSelected: this._totalTimeSelected
+        };
+        timersData.push(JSON.stringify(settingsData));
+
         this._settings.set_strv('timers', timersData);
     }
 
@@ -118,13 +185,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let buttonsBox = new St.BoxLayout({x_expand: true});
 
 
-        // Total time item with eye icon
-        // let totalTimeItem = new PopupMenu.PopupBaseMenuItem();
-
+        // Total time eye button
         this._totalTimeEyeIcon = new St.Icon({
-            icon_name: 'radio-symbolic',
+            icon_name: this._totalTimeSelected ? 'selection-mode-symbolic' : 'radio-symbolic',
             style_class: 'timer-icon',
         });
+
+
         this._totalTimeEyeButton = new St.Button({child: this._totalTimeEyeIcon});
         this._totalTimeEyeButton.connect('clicked', () => {
             this._toggleTotalTimeSelection();
@@ -177,6 +244,20 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         eyeButton.connect('clicked', () => {
             timer.selected = !timer.selected;
             eyeIcon.icon_name = timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic';
+
+            if (timer.selected) {
+                // Deselect total time
+                this._totalTimeSelected = false;
+                this._totalTimeEyeIcon.icon_name = 'radio-symbolic';
+            } else {
+                // If no timers are selected, select total time
+                let anySelected = this._timers.some(t => t.selected);
+                if (!anySelected) {
+                    this._totalTimeSelected = true;
+                    this._totalTimeEyeIcon.icon_name = 'selection-mode-symbolic';
+                }
+            }
+
             this._updatePanelLabel();
             this._saveTimers();
         });
@@ -322,8 +403,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
     }
 
-_pauseTimer(timer) {
-    let uiElements = this._timerUIElements.get(timer.id);
+    _pauseTimer(timer) {
+        let uiElements = this._timerUIElements.get(timer.id);
 
         let currentTime = GLib.get_real_time();
         let elapsed = (currentTime - timer.startTime) / 1000000;
@@ -335,7 +416,7 @@ _pauseTimer(timer) {
         if (uiElements && uiElements.playPauseIcon) {
             uiElements.playPauseIcon.icon_name = 'media-playback-start-symbolic';
         }
-    if (uiElements && uiElements.item) {
+        if (uiElements && uiElements.item) {
             uiElements.item.add_style_class_name('timer-paused');
         }
     }
@@ -368,36 +449,36 @@ _pauseTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
         let {item, nameLabel, timeLabel, eyeButton, playPauseButton, editButton, deleteButton} = uiElements;
 
-    // Hide the Eye, Play/Pause, Edit, and Delete buttons
+        // Hide the Eye, Play/Pause, Edit, and Delete buttons
         eyeButton.hide();
         playPauseButton.hide();
         editButton.hide();
         deleteButton.hide();
 
         // Create an entry field to edit the timer name
-    let nameEntry = new St.Entry({
-        text: timer.name,
-        x_expand: true,
-        style_class: 'timer-entry',
-        hint_text: 'Timer Name',
-        can_focus: true,
-    });
+        let nameEntry = new St.Entry({
+            text: timer.name,
+            x_expand: true,
+            style_class: 'timer-entry',
+            hint_text: 'Timer Name',
+            can_focus: true,
+        });
 
-    // Create an entry field to edit the timer value
-    let timeEntry = new St.Entry({
-        text: this._formatTime(timer.timeElapsed),
-        x_expand: true,
-        style_class: 'timer-entry',
-        hint_text: 'Time (hh:mm:ss)',
-        can_focus: true,
-    });
+        // Create an entry field to edit the timer value
+        let timeEntry = new St.Entry({
+            text: this._formatTime(timer.timeElapsed),
+            x_expand: true,
+            style_class: 'timer-entry',
+            hint_text: 'Time (hh:mm:ss)',
+            can_focus: true,
+        });
 
-    // Replace the nameLabel and timeLabel with the entry fields
-    let nameEntryParent = nameLabel.get_parent();
-    nameEntryParent.replace_child(nameLabel, nameEntry);
+        // Replace the nameLabel and timeLabel with the entry fields
+        let nameEntryParent = nameLabel.get_parent();
+        nameEntryParent.replace_child(nameLabel, nameEntry);
 
-    let timeEntryParent = timeLabel.get_parent();
-    timeEntryParent.replace_child(timeLabel, timeEntry);
+        let timeEntryParent = timeLabel.get_parent();
+        timeEntryParent.replace_child(timeLabel, timeEntry);
 
         // Create Save and Cancel buttons
         let saveIcon = new St.Icon({
@@ -415,24 +496,24 @@ _pauseTimer(timer) {
         item.add_child(saveButton);
         item.add_child(cancelButton);
 
-    // Helper function to save the timer name and value
-    const saveTimer = () => {
-        timer.name = nameEntry.get_text();
+        // Helper function to save the timer name and value
+        const saveTimer = () => {
+            timer.name = nameEntry.get_text();
 
-        // Parse the time input
-        let timeText = timeEntry.get_text();
-        let newTimeElapsed = this._parseTimeInput(timeText);
-        if (newTimeElapsed !== null) {
-            timer.timeElapsed = newTimeElapsed;
-        }
-        // If the input is invalid, silently ignore and keep the previous value
+            // Parse the time input
+            let timeText = timeEntry.get_text();
+            let newTimeElapsed = this._parseTimeInput(timeText);
+            if (newTimeElapsed !== null) {
+                timer.timeElapsed = newTimeElapsed;
+            }
+            // If the input is invalid, silently ignore and keep the previous value
 
-        // Replace the entries with the updated labels
-        nameEntryParent.replace_child(nameEntry, nameLabel);
+            // Replace the entries with the updated labels
+            nameEntryParent.replace_child(nameEntry, nameLabel);
             nameLabel.text = timer.name;
 
-        timeEntryParent.replace_child(timeEntry, timeLabel);
-        timeLabel.text = this._formatTime(timer.timeElapsed);
+            timeEntryParent.replace_child(timeEntry, timeLabel);
+            timeLabel.text = this._formatTime(timer.timeElapsed);
 
             // Remove Save and Cancel buttons
             item.remove_child(saveButton);
@@ -446,82 +527,69 @@ _pauseTimer(timer) {
 
             // Reset the editing state
             timer.isEditing = false;
-        timer.editEntries = null;
+            timer.editEntries = null;
 
             this._saveTimers();
         };
 
         // Helper function to cancel editing
         const cancelEdit = () => {
-        // Replace the entries with the original labels
-        nameEntryParent.replace_child(nameEntry, nameLabel);
-        timeEntryParent.replace_child(timeEntry, timeLabel);
-
-            // Remove Save and Cancel buttons
-            item.remove_child(saveButton);
-            item.remove_child(cancelButton);
-
-            // Show the previously hidden elements
-            eyeButton.show();
-            playPauseButton.show();
-            editButton.show();
-            deleteButton.show();
-
-            // Reset the editing state
-            timer.isEditing = false;
-        timer.editEntries = null;
+            this._resetEditingState(timer);
         };
 
         // Connect signals for the Save and Cancel buttons
-    saveButton.connect('clicked', saveTimer);
+        saveButton.connect('clicked', saveTimer);
         cancelButton.connect('clicked', cancelEdit);
 
-    // Handle key events for both entries
-    const handleKeyPress = (entry, nextEntry, previousEntry) => {
-        entry.clutter_text.connect('key-press-event', (actor, event) => {
-            let symbol = event.get_key_symbol();
-            let state = event.get_state();
+        // Handle key events for both entries
+        const handleKeyPress = (entry, nextEntry, previousEntry) => {
+            entry.clutter_text.connect('key-press-event', (actor, event) => {
+                let symbol = event.get_key_symbol();
+                let state = event.get_state();
 
-            if (symbol === Clutter.KEY_Escape) {
-                cancelEdit();
-                return Clutter.EVENT_STOP;
-            } else if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
-                saveTimer();
-                return Clutter.EVENT_STOP;
-            } else if (symbol === Clutter.KEY_Tab) {
-                if (state & Clutter.ModifierType.SHIFT_MASK) {
-                    // Shift+Tab: Move focus to previous entry
-                    if (previousEntry) {
-                        previousEntry.grab_key_focus();
-                        return Clutter.EVENT_STOP;
+                if (symbol === Clutter.KEY_Escape) {
+                    cancelEdit();
+                    // Prevent the menu from closing
+                    return true; // Return true to stop event propagation
+                } else if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
+                    saveTimer();
+                    return true;
+                } else if (symbol === Clutter.KEY_Tab || symbol === Clutter.KEY_ISO_Left_Tab) {
+                    let shiftPressed = state & Clutter.ModifierType.SHIFT_MASK;
+                    if (shiftPressed || symbol === Clutter.KEY_ISO_Left_Tab) {
+                        // Shift+Tab: Move focus to previous entry
+                        if (previousEntry) {
+                            previousEntry.grab_key_focus();
+                            return true;
+                        }
+                    } else {
+                        // Tab: Move focus to next entry
+                        if (nextEntry) {
+                            nextEntry.grab_key_focus();
+                            return true;
+                        }
                     }
-                } else {
-                    // Tab: Move focus to next entry
-                    if (nextEntry) {
-                        nextEntry.grab_key_focus();
-                        return Clutter.EVENT_STOP;
-                    }
+                    return true;
                 }
-            }
-            return Clutter.EVENT_PROPAGATE;
-        });
-    };
+                return false; // Allow other keys to be handled normally
+            });
+        };
 
-    // Apply key handling to both entries
-    handleKeyPress(nameEntry, timeEntry, null);
-    handleKeyPress(timeEntry, null, nameEntry);
+        // Apply key handling to both entries
+        handleKeyPress(nameEntry, timeEntry, null);
+        handleKeyPress(timeEntry, null, nameEntry);
 
-    // Auto-focus the nameEntry field after a slight delay
+        // Auto-focus the nameEntry field after a slight delay
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
-        if (nameEntry && nameEntry.get_stage()) {
-            nameEntry.grab_key_focus();
+            if (nameEntry && nameEntry.get_stage()) {
+                nameEntry.grab_key_focus();
             }
             return GLib.SOURCE_REMOVE;
         });
 
-    // Store the edit mode state and entry fields
+        // Store the edit mode state and entry fields
         timer.isEditing = true;
-    timer.editEntries = { nameEntry, timeEntry };
+        timer.editEntries = {nameEntry, timeEntry};
         timer.saveButton = saveButton;
         timer.cancelButton = cancelButton;
     }
@@ -626,7 +694,13 @@ _pauseTimer(timer) {
                 }, 0);
                 this._label.text = this._formatTime(totalTime);
             } else {
-                this._label.text = 'Tracker';
+                // No timers selected and total time not selected
+                // Show total time by default
+                this._totalTimeSelected = true;
+                this._totalTimeEyeIcon.icon_name = 'selection-mode-symbolic';
+                this._label.text = this._formatTime(
+                    this._timers.reduce((sum, timer) => sum + this._getTimerTotalTime(timer, currentTime), 0)
+                );
             }
         }
     }
@@ -682,43 +756,7 @@ _pauseTimer(timer) {
     _onMenuClosed() {
         this._timers.forEach(timer => {
             if (timer.isEditing) {
-                let uiElements = this._timerUIElements.get(timer.id);
-                let {item, nameLabel, eyeButton, playPauseButton, editButton, deleteButton, timeLabel} = uiElements;
-                let entry = timer.editEntry;
-
-                if (entry && typeof entry.get_parent === 'function') {
-                    // Replace the entry with the original name label
-                    let entryParent = entry.get_parent();
-                    entryParent.replace_child(entry, nameLabel);
-                } else {
-                    log(`Error: Invalid entry for timer "${timer.name}"`);
-                    // In case entry is invalid, reset the name label
-                    if (nameLabel && nameLabel.get_parent) {
-                        let parent = nameLabel.get_parent();
-                        parent.replace_child(nameLabel, nameLabel);
-                    }
-                }
-
-                // Remove Save and Cancel buttons
-                if (timer.saveButton && item.contains(timer.saveButton)) {
-                    item.remove_child(timer.saveButton);
-                }
-                if (timer.cancelButton && item.contains(timer.cancelButton)) {
-                    item.remove_child(timer.cancelButton);
-                }
-
-                // Show the previously hidden elements
-                eyeButton.show();
-                playPauseButton.show();
-                editButton.show();
-                deleteButton.show();
-                timeLabel.show();
-
-                // Reset the editing state
-                timer.isEditing = false;
-                timer.editEntry = null;
-                timer.saveButton = null;
-                timer.cancelButton = null;
+                this._resetEditingState(timer);
             }
         });
     }
@@ -731,10 +769,26 @@ _pauseTimer(timer) {
         return `${hrs}:${mins}:${secs}`;
     }
 
+    _onScreenLocked() {
+        this._pauseAllTimers();
+        this._saveTimers();
+    }
+
+
     destroy() {
         if (this._timerUpdate) {
             GLib.source_remove(this._timerUpdate);
             this._timerUpdate = null;
+        }
+
+        // Pause all timers and save the state
+        this._pauseAllTimers();
+        this._saveTimers();
+
+        // Disconnect screen lock signal
+        if (this._screenLockSignal) {
+            Main.screenShield.disconnect(this._screenLockSignal);
+            this._screenLockSignal = null;
         }
 
         // Clean up settings
