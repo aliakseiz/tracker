@@ -39,7 +39,6 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 // TODO hovering timer control buttons should highlight them with a circle indicating that they are clickable
 // TODO change the text color based on the Gnome theme dark/light
-// TODO pause all timers on screen lock and log out
 
 const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _init(extension) {
@@ -214,6 +213,18 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
         buttonsBox.add_child(pauseAllButton);
 
+        // Total time reset button
+        let totalResetIcon = new St.Icon({
+            icon_name: 'edit-clear-all-symbolic', // Use an appropriate icon
+            style_class: 'timer-icon',
+        });
+        let totalResetButton = new St.Button({child: totalResetIcon});
+        totalResetButton.connect('clicked', () => {
+            this._resetAllTimers();
+        });
+        buttonsBox.add_child(totalResetButton);
+
+
         // Add new timer button
         let addIcon = new St.Icon({
             icon_name: 'list-add-symbolic',
@@ -228,6 +239,25 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         buttonsItem.actor.add_child(buttonsBox);
         this.menu.addMenuItem(buttonsItem);
     }
+
+    _resetAllTimers() {
+        this._timers.forEach(timer => {
+            timer.timeElapsed = 0;
+
+            // Update UI
+            let uiElements = this._timerUIElements.get(timer.id);
+            if (uiElements && uiElements.timeLabel) {
+                uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
+            }
+        });
+
+        // Update total time labels
+        this._updateTotalTime();
+        this._updatePanelLabel();
+
+        this._saveTimers();
+    }
+
 
     _addTimerItem(timer) {
         let timerItem = new PopupMenu.PopupBaseMenuItem({
@@ -346,6 +376,20 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         timerItem.add_child(playPauseButton);
 
+        // Reset button
+        let resetButton = new St.Button({
+            child: new St.Icon({
+                icon_name: 'edit-clear-symbolic',
+                style_class: 'timer-icon',
+            })
+        });
+
+        resetButton.connect('clicked', () => {
+            this._resetTimer(timer);
+        });
+
+        timerItem.add_child(resetButton);
+
         // Edit button
         let editButton = new St.Button({
             child: new St.Icon({
@@ -397,11 +441,29 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             timeLabel: timeLabel,
             eyeButton: eyeButton,
             playPauseButton: playPauseButton,
-            playPauseIcon: playPauseIcon, // Add this to update the icon elsewhere
+            playPauseIcon: playPauseIcon,
+            resetButton: resetButton,
             editButton: editButton,
             deleteButton: deleteButton
         });
     }
+
+    _resetTimer(timer) {
+        timer.timeElapsed = 0;
+
+        // Update UI
+        let uiElements = this._timerUIElements.get(timer.id);
+        if (uiElements && uiElements.timeLabel) {
+            uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
+        }
+
+        // Update total time labels
+        this._updateTotalTime();
+        this._updatePanelLabel();
+
+        this._saveTimers();
+    }
+
 
     _pauseTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
