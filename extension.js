@@ -68,6 +68,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._onScreenLocked();
         });
 
+        this._startPeriodicSave();
+
         this._startTimers();
     }
 
@@ -123,7 +125,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
 
     _loadTimers() {
-        let currentTime = GLib.get_real_time();
         let timersData = this._settings.get_strv('timers');
         this._timers = [];
         this._totalTimeSelected = true; // Default value
@@ -137,7 +138,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 if (!timer.id) {
                     timer.id = GLib.uuid_string_random();
                 }
-                timer.startTime = null;
+                // Set timers to paused state upon loading
+                timer.running = false;
+                timer.lastUpdateTime = null;
                 this._timers.push(timer);
             }
         });
@@ -145,9 +148,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
     _saveTimers() {
         let timersData = this._timers.map(timer => {
-            // Exclude startTime from being saved
             let timerCopy = {...timer};
-            delete timerCopy.startTime;
+            delete timerCopy.lastUpdateTime;
             return JSON.stringify(timerCopy);
         });
 
@@ -246,9 +248,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._timers.forEach(timer => {
             timer.timeElapsed = 0;
 
-            // If the timer is running, reset the startTime to current time
+            // If the timer is running, reset the lastUpdateTime to current time
             if (timer.running) {
-                timer.startTime = currentTime;
+                timer.lastUpdateTime = currentTime;
             }
 
             // Update UI
@@ -263,6 +265,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._updatePanelLabel();
 
         this._saveTimers();
+    }
+
+    _startPeriodicSave() {
+        this._periodicSaveId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
+            this._saveTimers();
+            return GLib.SOURCE_CONTINUE;
+        });
     }
 
 
@@ -341,13 +350,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Function to toggle the timer state
         const toggleTimerState = () => {
+            let currentTime = GLib.get_real_time();
             if (timer.running) {
                 // Pause timer
-                let currentTime = GLib.get_real_time();
-                let elapsed = (currentTime - timer.startTime) / 1000000;
+                let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
                 timer.timeElapsed += elapsed;
                 timer.running = false;
-                timer.startTime = null;
+                timer.lastUpdateTime = null;
 
                 // Update icon to "Play"
                 playPauseIcon.icon_name = 'media-playback-start-symbolic';
@@ -355,7 +364,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             } else {
                 // Start timer
                 timer.running = true;
-                timer.startTime = GLib.get_real_time();
+                timer.lastUpdateTime = currentTime;
 
                 // Update icon to "Pause"
                 playPauseIcon.icon_name = 'media-playback-pause-symbolic';
@@ -439,6 +448,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             timerItem.add_style_class_name('timer-paused');
         }
 
+
         this._timersSection.addMenuItem(timerItem);
 
         // Store UI elements in the Map
@@ -457,10 +467,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
     _resetTimer(timer) {
         timer.timeElapsed = 0;
-
-        // If the timer is running, reset the startTime to current time
         if (timer.running) {
-            timer.startTime = GLib.get_real_time();
+            timer.lastUpdateTime = GLib.get_real_time();
+        } else {
+            timer.lastUpdateTime = null;
         }
 
         // Update UI
@@ -481,10 +491,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let uiElements = this._timerUIElements.get(timer.id);
 
         let currentTime = GLib.get_real_time();
-        let elapsed = (currentTime - timer.startTime) / 1000000;
+        let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
         timer.timeElapsed += elapsed;
         timer.running = false;
-        timer.startTime = null;
+        timer.lastUpdateTime = null;
 
         // Update UI
         if (uiElements && uiElements.playPauseIcon) {
@@ -493,6 +503,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (uiElements && uiElements.item) {
             uiElements.item.add_style_class_name('timer-paused');
         }
+
+        this._saveTimers();
     }
 
     _parseTimeInput(timeString) {
@@ -689,7 +701,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             id: GLib.uuid_string_random(), // Assign a unique ID
             name: '<empty>',
             timeElapsed: 0,
-            startTime: null,
             running: false,
             selected: false
         };
@@ -703,9 +714,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let currentTime = GLib.get_real_time();
         this._timers.forEach(timer => {
             if (timer.running) {
-                let elapsed = (currentTime - timer.startTime) / 1000000;
+                let currentTime = GLib.get_real_time();
+                let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
                 timer.timeElapsed += elapsed;
-                timer.startTime = null;
+                timer.running = false;
+                timer.lastUpdateTime = null;
             }
             timer.running = false; // Ensure all timers are set to not running
 
@@ -788,20 +801,21 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                     // UI elements not found for this timer, skip updating
                     return;
                 }
-                if (timer.running && timer.startTime) {
-                    // Ensure startTime is a number
-                    let startTime = parseInt(timer.startTime, 10);
-                    if (isNaN(startTime)) {
-                        // If parsing fails, reset startTime
-                        timer.startTime = currentTime;
-                        startTime = currentTime;
+                if (timer.running) {
+                    if (timer.lastUpdateTime === null || timer.lastUpdateTime === undefined) {
+                        // Since the timer is running, but lastUpdateTime is invalid, reset it
+                        timer.lastUpdateTime = currentTime;
+                        // Do not update timeElapsed this cycle
+                    } else {
+                        let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
+                        timer.timeElapsed += elapsed;
+                        timer.lastUpdateTime = currentTime;
                     }
-                    let elapsed = (currentTime - startTime) / 1000000;
-                    let totalElapsed = timer.timeElapsed + elapsed;
-                    uiElements.timeLabel.text = this._formatTime(totalElapsed);
+                    uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
                 } else {
                     uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
                 }
+
             });
             this._updateTotalTime();
             this._updatePanelLabel();
@@ -810,8 +824,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _getTimerTotalTime(timer, currentTime) {
-        if (timer.running && timer.startTime) {
-            let elapsed = (currentTime - timer.startTime) / 1000000;
+        if (timer.running && timer.lastUpdateTime) {
+            let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
             return timer.timeElapsed + elapsed;
         } else {
             return timer.timeElapsed;
@@ -858,6 +872,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Pause all timers and save the state
         this._pauseAllTimers();
         this._saveTimers();
+
+        if (this._periodicSaveId) {
+            GLib.source_remove(this._periodicSaveId);
+            this._periodicSaveId = null;
+        }
 
         // Disconnect screen lock signal
         if (this._screenLockSignal) {
