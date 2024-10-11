@@ -37,8 +37,6 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// TODO click on a timer should not close the menu
-// TODO click on a timer should control start/pause state
 // TODO hovering timer control buttons should highlight them with a circle indicating that they are clickable
 // TODO change the text color based on the Gnome theme dark/light
 // TODO pause all timers on screen lock and log out
@@ -382,6 +380,7 @@ _pauseTimer(timer) {
         x_expand: true,
         style_class: 'timer-entry',
         hint_text: 'Timer Name',
+        can_focus: true,
     });
 
     // Create an entry field to edit the timer value
@@ -390,6 +389,7 @@ _pauseTimer(timer) {
         x_expand: true,
         style_class: 'timer-entry',
         hint_text: 'Time (hh:mm:ss)',
+        can_focus: true,
     });
 
     // Replace the nameLabel and timeLabel with the entry fields
@@ -424,11 +424,8 @@ _pauseTimer(timer) {
         let newTimeElapsed = this._parseTimeInput(timeText);
         if (newTimeElapsed !== null) {
             timer.timeElapsed = newTimeElapsed;
-        } else {
-            // Invalid time input, show an error (optional)
-            Main.notifyError('Invalid Time Format', 'Please enter time in hh:mm:ss format.');
-            return;
         }
+        // If the input is invalid, silently ignore and keep the previous value
 
         // Replace the entries with the updated labels
         nameEntryParent.replace_child(nameEntry, nameLabel);
@@ -479,10 +476,40 @@ _pauseTimer(timer) {
     saveButton.connect('clicked', saveTimer);
         cancelButton.connect('clicked', cancelEdit);
 
-    // Handle Enter key press on the timeEntry field
-    timeEntry.clutter_text.connect('activate', saveTimer);
-    // Handle Enter key press on the nameEntry field
-    nameEntry.clutter_text.connect('activate', saveTimer);
+    // Handle key events for both entries
+    const handleKeyPress = (entry, nextEntry, previousEntry) => {
+        entry.clutter_text.connect('key-press-event', (actor, event) => {
+            let symbol = event.get_key_symbol();
+            let state = event.get_state();
+
+            if (symbol === Clutter.KEY_Escape) {
+                cancelEdit();
+                return Clutter.EVENT_STOP;
+            } else if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
+                saveTimer();
+                return Clutter.EVENT_STOP;
+            } else if (symbol === Clutter.KEY_Tab) {
+                if (state & Clutter.ModifierType.SHIFT_MASK) {
+                    // Shift+Tab: Move focus to previous entry
+                    if (previousEntry) {
+                        previousEntry.grab_key_focus();
+                        return Clutter.EVENT_STOP;
+                    }
+                } else {
+                    // Tab: Move focus to next entry
+                    if (nextEntry) {
+                        nextEntry.grab_key_focus();
+                        return Clutter.EVENT_STOP;
+                    }
+                }
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+    };
+
+    // Apply key handling to both entries
+    handleKeyPress(nameEntry, timeEntry, null);
+    handleKeyPress(timeEntry, null, nameEntry);
 
     // Auto-focus the nameEntry field after a slight delay
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
