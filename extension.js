@@ -80,7 +80,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             return;
         }
 
-        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, editButton, deleteButton} = uiElements;
+        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton} = uiElements;
         let nameEntry = timer.editEntries?.nameEntry;
         let timeEntry = timer.editEntries?.timeEntry;
         let saveButton = timer.saveButton;
@@ -112,6 +112,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Show the previously hidden elements
         eyeButton.show();
         playPauseButton.show();
+        resetButton.show();
         editButton.show();
         deleteButton.show();
         timeLabel.show();
@@ -533,11 +534,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
     _editTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
-        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, editButton, deleteButton} = uiElements;
+        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton} = uiElements;
 
         // Hide the Eye, Play/Pause, Edit, and Delete buttons
         eyeButton.hide();
         playPauseButton.hide();
+        resetButton.hide();
         editButton.hide();
         deleteButton.hide();
 
@@ -546,7 +548,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             text: timer.name,
             x_expand: true,
             style_class: 'timer-entry',
-            hint_text: 'Timer Name',
+            hint_text: 'Timer name',
             can_focus: true,
         });
 
@@ -555,7 +557,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             text: this._formatTime(timer.timeElapsed),
             x_expand: true,
             style_class: 'timer-entry',
-            hint_text: 'Time (hh:mm:ss)',
+            hint_text: 'hh:mm:ss',
             can_focus: true,
         });
 
@@ -608,6 +610,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             // Show the previously hidden elements
             eyeButton.show();
             playPauseButton.show();
+            resetButton.show();
             editButton.show();
             deleteButton.show();
 
@@ -892,7 +895,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         super.destroy();
     }
-
 });
 
 export default class TrackerExtension extends Extension {
