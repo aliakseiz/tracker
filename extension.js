@@ -80,7 +80,16 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             return;
         }
 
-        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton} = uiElements;
+        let {
+            item,
+            nameLabel,
+            timeLabel,
+            eyeButton,
+            playPauseButton,
+            resetButton,
+            editButton,
+            deleteButton
+        } = uiElements;
         let nameEntry = timer.editEntries?.nameEntry;
         let timeEntry = timer.editEntries?.timeEntry;
         let saveButton = timer.saveButton;
@@ -108,6 +117,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (cancelButton && item.contains(cancelButton)) {
             item.remove_child(cancelButton);
         }
+
+        // Restore padding to normal state
+        item.remove_style_class_name('timer-edit');
+        // Restore buttons color
+        item.add_style_class_name('timer-paused');
 
         // Show the previously hidden elements
         eyeButton.show();
@@ -180,12 +194,32 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         // Buttons row
-        let buttonsItem = new PopupMenu.PopupBaseMenuItem({
+        let summaryRow = new PopupMenu.PopupBaseMenuItem({
             reactive: false,
             style_class: 'summary-row',
         });
-        let buttonsBox = new St.BoxLayout({x_expand: true});
 
+        let summaryWrapper = new St.BoxLayout({
+            vertical: false,
+            x_expand: true,
+            style_class: 'summary-wrapper',
+        });
+
+        // Left container for the total time eye button and label
+        let leftContainer = new St.BoxLayout({
+            vertical: false,
+            x_expand: true,
+            style_class: 'left-container',
+        });
+        leftContainer.y_align = Clutter.ActorAlign.CENTER;
+
+        // Right container for the action buttons
+        let rightContainer = new St.BoxLayout({
+            vertical: false,
+            x_expand: false,
+            style_class: 'right-container',
+        });
+        rightContainer.y_align = Clutter.ActorAlign.CENTER;
 
         // Total time eye button
         this._totalTimeEyeIcon = new St.Icon({
@@ -193,17 +227,14 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             style_class: 'timer-icon',
         });
 
-
         this._totalTimeEyeButton = new St.Button({child: this._totalTimeEyeIcon});
         this._totalTimeEyeButton.connect('clicked', () => {
             this._toggleTotalTimeSelection();
         });
-        buttonsItem.add_child(this._totalTimeEyeButton);
+        summaryRow.add_child(this._totalTimeEyeButton);
 
         this._totalTimeLabel = new St.Label({text: 'Total: 00:00:00', x_expand: true});
-        buttonsItem.add_child(this._totalTimeLabel);
-
-        // this.menu.addMenuItem(totalTimeItem);
+        summaryRow.add_child(this._totalTimeLabel);
 
         // Pause all timers button
         let pauseAllIcon = new St.Icon({
@@ -214,19 +245,18 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         pauseAllButton.connect('clicked', () => {
             this._pauseAllTimers();
         });
-        buttonsBox.add_child(pauseAllButton);
+        rightContainer.add_child(pauseAllButton);
 
         // Total time reset button
         let totalResetIcon = new St.Icon({
-            icon_name: 'edit-clear-all-symbolic', // Use an appropriate icon
+            icon_name: 'edit-clear-all-symbolic',
             style_class: 'timer-icon',
         });
         let totalResetButton = new St.Button({child: totalResetIcon});
         totalResetButton.connect('clicked', () => {
             this._resetAllTimers();
         });
-        buttonsBox.add_child(totalResetButton);
-
+        rightContainer.add_child(totalResetButton);
 
         // Add new timer button
         let addIcon = new St.Icon({
@@ -237,10 +267,15 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         addButton.connect('clicked', () => {
             this._addNewTimer();
         });
-        buttonsBox.add_child(addButton);
+        rightContainer.add_child(addButton);
 
-        buttonsItem.actor.add_child(buttonsBox);
-        this.menu.addMenuItem(buttonsItem);
+// Assemble the buttons container
+        summaryWrapper.add_child(leftContainer);
+        summaryWrapper.add_child(rightContainer);
+
+// Add the assembled container to the summaryRow
+        summaryRow.add_child(summaryWrapper);
+        this.menu.addMenuItem(summaryRow);
     }
 
     _resetAllTimers() {
@@ -534,7 +569,16 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
     _editTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
-        let {item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton} = uiElements;
+        let {
+            item,
+            nameLabel,
+            timeLabel,
+            eyeButton,
+            playPauseButton,
+            resetButton,
+            editButton,
+            deleteButton
+        } = uiElements;
 
         // Hide the Eye, Play/Pause, Edit, and Delete buttons
         eyeButton.hide();
@@ -547,7 +591,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let nameEntry = new St.Entry({
             text: timer.name,
             x_expand: true,
-            style_class: 'timer-entry',
+            y_align: Clutter.ActorAlign.CENTER,
+            style_class: 'name-entry',
             hint_text: 'Timer name',
             can_focus: true,
         });
@@ -555,7 +600,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Create an entry field to edit the timer value
         let timeEntry = new St.Entry({
             text: this._formatTime(timer.timeElapsed),
-            x_expand: true,
+            x_expand: false,   // Do not allow horizontal expansion
+            width: 80,
+            y_align: Clutter.ActorAlign.CENTER,
             style_class: 'timer-entry',
             hint_text: 'hh:mm:ss',
             can_focus: true,
@@ -570,11 +617,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Create Save and Cancel buttons
         let saveIcon = new St.Icon({
+            y_align: Clutter.ActorAlign.CENTER,
             icon_name: 'document-save-symbolic',
             style_class: 'timer-icon',
         });
         let saveButton = new St.Button({child: saveIcon});
         let cancelIcon = new St.Icon({
+            y_align: Clutter.ActorAlign.CENTER,
             icon_name: 'process-stop-symbolic',
             style_class: 'timer-icon',
         });
@@ -583,6 +632,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Add the Save and Cancel buttons to the timer item
         item.add_child(saveButton);
         item.add_child(cancelButton);
+        // Decrease padding to fit input text fields without changing the container height
+        item.add_style_class_name('timer-edit');
+        // Make buttons not-paused
+        item.remove_style_class_name('timer-paused');
 
         // Helper function to save the timer name and value
         const saveTimer = () => {
@@ -606,6 +659,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             // Remove Save and Cancel buttons
             item.remove_child(saveButton);
             item.remove_child(cancelButton);
+
+            // Restore padding to normal state
+            item.remove_style_class_name('timer-edit');
+            // Restore buttons color
+            item.add_style_class_name('timer-paused');
 
             // Show the previously hidden elements
             eyeButton.show();

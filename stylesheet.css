@@ -1,19 +1,25 @@
-.timer-icon {
-    width: 1em;
-    height: 1em;
-    padding-right: 1em;
+/* Main container of timer item */
+.timer-item {
+    min-width: 10em;
+    max-width: 30em;
+    padding: 0.7em;
+    spacing: 1.2em;
 }
 
-.timer-paused .timer-text,
-.timer-paused .timer-time,
-.timer-paused .timer-icon {
-    color: grey;
+.timer-label-container { /* Clickable timer name and time */
+    padding: 0 0.5em 0 0.5em;
+}
+
+.timer-label-container:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 0.5em;
 }
 
 .timer-text {
     min-width: 3em;
     max-width: 20em;
     text-align: left;
+    margin-right: 1em;
 }
 
 .timer-time {
@@ -21,20 +27,59 @@
     text-align: left;
 }
 
-.timer-item {
-    min-width: 10em;
-    max-width: 30em;
+.timer-icon {
+    width: 1em;
+    height: 1em;
 }
 
+.timer-icon:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 0.5em;
+}
+
+/* Paused state */
+.timer-paused .timer-text,
+.timer-paused .timer-time,
+.timer-paused .timer-icon {
+    color: grey;
+}
+
+/* Editing */
+.name-entry, .timer-entry {
+    padding-top: 0;
+    padding-bottom: 0;
+    height: 2em;
+    padding-right: 0;
+}
+
+.name-entry {
+    margin-right: 0.5em;
+}
+
+.timer-edit {
+    padding: 0.35em 0.7em 0.35em 0;
+}
+
+/* Total time row */
+/* Main wrapper */
 .summary-row {
     color: lightgrey;
 }
 
-.timer-label-container {
-    padding-right: 10px;
+.summary-wrapper {
+    spacing: 0.5em;
 }
 
-.timer-label-container:hover {
-    cursor: pointer;
-    background-color: rgba(255, 255, 255, 0.1);
+/* Left container (total time eye button and label) */
+.left-container {
+    spacing: 0.5em;
+    /* Ensure it expands to take available space */
+    flex: 1;
+}
+
+/* Right container (action buttons) */
+.right-container {
+    spacing: 1.2em;
+    /* Align items to the end (right side) */
+    justify-content: flex-end;
 }
