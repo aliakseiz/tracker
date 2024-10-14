@@ -111,10 +111,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         }
 
         // Remove Save and Cancel buttons
-        if (saveButton && item.contains(saveButton)) {
+        if (saveButton && item.actor.contains(saveButton)) {
             item.remove_child(saveButton);
         }
-        if (cancelButton && item.contains(cancelButton)) {
+        if (cancelButton && item.actor.contains(cancelButton)) {
             item.remove_child(cancelButton);
         }
 
@@ -601,7 +601,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let timeEntry = new St.Entry({
             text: this._formatTime(timer.timeElapsed),
             x_expand: false,   // Do not allow horizontal expansion
-            width: 80,
+            width: 85,
             y_align: Clutter.ActorAlign.CENTER,
             style_class: 'timer-entry',
             hint_text: 'hh:mm:ss',
