@@ -1,42 +1,30 @@
-Make an extension for Gnome IDE to manage multiple timers.
-It should display a clickable label in the Gnome panel. This label should show the text "Tracker" by default.
-Clicking the Tracker label/button should display the panel with several items (from top to bottom):
-- total time from all timers
-- list of timers
-- row with buttons represented as icons: pause all timers, add new timer
+# Tracker
 
-Items in the list of timers should have the following layout (from left to right):
-- greyed out eye icon (or a white eye icon, if selected) indicating that the timer value of the selected timer(s) should be displayed in the Gnome panel instead of default "Tracker" text
-- label with the timer name
-- timer time
-- icon button (play/pause) to start/pause the timer (icon changes depending on the current state of the timer)
-- icon button (pencil) to modify timer name
-- icon button (basket) to remove the timer
+Simple time tracking extension for Gnome.
 
-Hovering a timer item in the list should highlight it as a normal menu item.
+![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-01.gif)
 
-If multiple timers selected using the eye icon, the sum of selected timers values should be displayed in the Gnome panel. By default no timer should be selected.
-The first item in the panel "total time from all timers" should also have an eye icon, which should display the sum of all timers in the Gnome panel instead of the default "Tracker" label. It should deselect all specific timers in the list when pressed.  
+Features:
+- Multiple timers
+- Start/Stop: easily start or pause individual timers with one click
+- Reset: reset individual timers or all of them at once
+- Edit name and time
+- Selection: choose specific timers or display the total time
+- Persistent storage: timers are automatically saved and restored between sessions
+- Screen lock integration: automatically pauses all active timers when the screen is locked
+- Keyboard navigation: easily edit timers using keyboard shortcuts (e.g., Tab, Enter, and Escape for editing)
 
-Pressing the Edit timer button should change the timer label to the input and allow to modify the timer name.
-There should be two buttons on the right to the input: save (checkmark icon) and cancel (X cross icon).
+![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-02.png)
 
-Pressing the Add new timer button should add an empty timer to the end of the list in paused state. 
-Default timer name is "<empty>". Default eye icon state: not selected. Default timer value: 00:00:00
+![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-03.png)
 
-The timers states should be persistent between the shell restarts and screen locks.
+# Install
 
-* * *
+[Gnome shell extensions](https://extensions.gnome.org/extension/5796/stopwatch/)
 
-Debug with:
-```shell
-dbus-run-session -- gnome-shell --nested --wayland
-```
+---
+# License
+[MIT](LICENSE)
 
-* * *
-
-Compile schemas:
-```shell
-glib-compile-schemas schemas/
-```
-
+[License-Url]: http://opensource.org/licenses/MIT
+[License-Image]: https://img.shields.io/npm/l/express.svg

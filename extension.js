@@ -37,9 +37,6 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// TODO hovering timer control buttons should highlight them with a circle indicating that they are clickable
-// TODO change the text color based on the Gnome theme dark/light
-
 const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _init(extension) {
         super._init(0.0, 'Timer Tracker');
