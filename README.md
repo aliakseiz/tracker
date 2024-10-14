@@ -20,7 +20,7 @@ Features:
 
 # Install
 
-[Gnome shell extensions](https://extensions.gnome.org/extension/5796/stopwatch/)
+[Gnome shell extensions](https://extensions.gnome.org/extension/7447/tracker/)
 
 ---
 # License
