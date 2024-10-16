@@ -73,7 +73,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _resetEditingState(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
         if (!uiElements) {
-            log(`Error: UI elements not found for timer "${timer.name}"`);
+            console.log(`Error: UI elements not found for timer "${timer.name}"`);
             return;
         }
 
@@ -723,13 +723,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         handleKeyPress(nameEntry, timeEntry, null);
         handleKeyPress(timeEntry, null, nameEntry);
 
-        // Auto-focus the nameEntry field after a slight delay
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
-            if (nameEntry && nameEntry.get_stage()) {
-                nameEntry.grab_key_focus();
-            }
-            return GLib.SOURCE_REMOVE;
-        });
+        // Auto-focus the nameEntry field
+        if (nameEntry && nameEntry.get_stage()) {
+            nameEntry.grab_key_focus();
+        }
 
         // Store the edit mode state and entry fields
         timer.isEditing = true;
@@ -796,7 +793,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 }
             } else {
                 // Log a warning if UI elements are missing
-                log(`Warning: UI elements not found for timer "${timer.name}"`);
+                console.log(`Warning: UI elements not found for timer "${timer.name}"`);
             }
         });
         this._saveTimers();
@@ -944,7 +941,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Clean up settings
         if (this._settings) {
-            this._settings.run_dispose();
             this._settings = null;
         }
 
