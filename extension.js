@@ -37,6 +37,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
 const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _init(extension) {
@@ -955,9 +956,36 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             stream.write_all(csv, null);
             stream.close(null);
 
-            Main.notify('Tracker', `CSV exported to: ${filePath}`);
+            const systemSource = MessageTray.getSystemSource();
+            const notification = new MessageTray.Notification({
+                // The source of the notification
+                source: systemSource,
+                // A title for the notification
+                title: _('Tracker'),
+                // The content of the notification
+                body: _(`CSV exported to: ${filePath}`),
+            });
+            notification.connect('activated', _notification => {
+                try {
+                    Gio.AppInfo.launch_default_for_uri(`file://${filePath}`, null);
+                } catch (err) {
+                    console.log(`Error: cannot open file: ${err.message}`);
+                }
+            });
+            notification.addAction("Show in Files", () => {
+                const directory = Gio.File.new_for_path(GLib.path_get_dirname(filePath));
+                if (directory) {
+                    try {
+                        Gio.AppInfo.launch_default_for_uri(directory.get_uri(), null);
+                    } catch (err) {
+                        console.log(`Error: cannot open directory: ${err.message}`);
+                    }
+                }
+            });
+
+            systemSource.addNotification(notification);
         } catch (err) {
-            console.log(`Error exporting CSV: ${err.message}`);
+            console.log(`Error: failed to export CSV: ${err.message}`);
         }
     }
 
