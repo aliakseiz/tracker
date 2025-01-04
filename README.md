@@ -13,6 +13,7 @@ Features:
 - Persistent storage: timers are automatically saved and restored between sessions
 - Screen lock integration: automatically pauses all active timers when the screen is locked
 - Keyboard navigation: easily edit timers using keyboard shortcuts (e.g., Tab, Enter, and Escape for editing)
+- Export current timers to CSV
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-02.png)
 
