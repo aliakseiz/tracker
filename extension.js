@@ -32,6 +32,7 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -232,6 +233,17 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._totalTimeLabel = new St.Label({text: 'Total: 00:00:00', x_expand: true});
         summaryRow.add_child(this._totalTimeLabel);
+
+        // Download CSV button
+        let downloadCsvIcon = new St.Icon({
+            icon_name: 'document-save-symbolic',
+            style_class: 'timer-icon',
+        });
+        let downloadCsvButton = new St.Button({child: downloadCsvIcon});
+        downloadCsvButton.connect('clicked', () => {
+            this._downloadCsv();
+        });
+        rightContainer.add_child(downloadCsvButton);
 
         // Pause all timers button
         let pauseAllIcon = new St.Icon({
@@ -917,6 +929,37 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._saveTimers();
     }
 
+    _downloadCsv() {
+        const DELIMITER = ',';
+        const NEWLINE = '\n';
+
+        // Create headers
+        let csv = `Name${DELIMITER}Time${NEWLINE}`;
+
+        // Populate rows
+        this._timers.forEach(timer => {
+            // Escape commas and wrap in quotes
+            let name = `"${timer.name.replace(/"/g, '""')}"`;
+            let time = this._formatTime(timer.timeElapsed);
+            csv += `${name}${DELIMITER}${time}${NEWLINE}`;
+        });
+
+        const now = GLib.DateTime.new_now_local();
+        const timestamp = now.format('%Y-%m-%d_%H-%M-%S');
+        const filePath = `${GLib.get_home_dir()}/timers_${timestamp}.csv`;
+
+        try {
+            let file = Gio.File.new_for_path(filePath);
+            let stream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
+
+            stream.write_all(csv, null);
+            stream.close(null);
+
+            Main.notify('Tracker', `CSV exported to: ${filePath}`);
+        } catch (err) {
+            console.log(`Error exporting CSV: ${err.message}`);
+        }
+    }
 
     destroy() {
         if (this._timerUpdate) {
