@@ -53,6 +53,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._settings = this.extension.getSettings('org.gnome.shell.extensions.tracker');
 
         this._timerUIElements = new Map();
+        this._currentWorkspaceId = null;
 
         this._totalTimeSelected = true; // Default to total time selected
         this._loadTimers();
@@ -65,6 +66,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._screenLockSignal = Main.screenShield.connect('locked', () => {
             this._onScreenLocked();
+        });
+
+        // Connect to workspace change signal
+        this._workspaceSignal = global.workspace_manager.connect('active-workspace-changed', (wm, from, to) => {
+            this._onWorkspaceChanged(wm, from, to);
         });
 
         this._startPeriodicSave();
@@ -625,6 +631,31 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let timeEntryParent = timeLabel.get_parent();
         timeEntryParent.replace_child(timeLabel, timeEntry);
 
+        // Create workspace selection dropdown
+        let workspaceSelect = new St.DropDown({
+            style_class: 'workspace-select',
+            width: 150,
+            can_focus: true,
+        });
+        
+        // Get available workspaces for the dropdown
+        let workspaceManager = global.workspace_manager;
+        let totalWorkspaces = workspaceManager.get_n_workspaces();
+        
+        // Add "No Workspace" option
+        workspaceSelect.append_text("No Workspace");
+        if (timer.workspaceId === null) {
+            workspaceSelect.set_selected(0);
+        }
+        
+        // Add workspace options
+        for (let i = 0; i < totalWorkspaces; i++) {
+            workspaceSelect.append_text(`Workspace ${i}`);
+            if (timer.workspaceId !== null && timer.workspaceId === i) {
+                workspaceSelect.set_selected(i + 1); // +1 because "No Workspace" is first
+            }
+        }
+
         // Create Save and Cancel buttons
         let saveIcon = new St.Icon({
             y_align: Clutter.ActorAlign.CENTER,
@@ -658,6 +689,16 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.timeElapsed = newTimeElapsed;
             }
             // If the input is invalid, silently ignore and keep the previous value
+
+            // Handle workspace selection
+            let selectedWorkspaceIndex = workspaceSelect.get_selected();
+            if (selectedWorkspaceIndex === 0) {
+                // "No Workspace" selected
+                timer.workspaceId = null;
+            } else {
+                // Actual workspace selected (subtract 1 for offset)
+                timer.workspaceId = selectedWorkspaceIndex - 1;
+            }
 
             // Replace the entries with the updated labels
             nameEntryParent.replace_child(nameEntry, nameLabel);
@@ -743,7 +784,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Store the edit mode state and entry fields
         timer.isEditing = true;
-        timer.editEntries = {nameEntry, timeEntry};
+        timer.editEntries = {nameEntry, timeEntry, workspaceSelect};
         timer.saveButton = saveButton;
         timer.cancelButton = cancelButton;
     }
@@ -765,12 +806,17 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
 
     _addNewTimer() {
+        // Get current workspace ID
+        let currentWorkspace = global.workspace_manager.get_active_workspace();
+        let workspaceId = currentWorkspace ? currentWorkspace.index() : 0;
+        
         let newTimer = {
             id: GLib.uuid_string_random(), // Assign a unique ID
             name: '<empty>',
             timeElapsed: 0,
             running: false,
-            selected: false
+            selected: false,
+            workspaceId: null // Default to no workspace association
         };
         this._timers.push(newTimer);
         this._addTimerItem(newTimer);
@@ -989,6 +1035,25 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         }
     }
 
+    _onWorkspaceChanged(wm, from, to) {
+        // Get the current workspace ID
+        let currentWorkspace = global.workspace_manager.get_active_workspace();
+        if (!currentWorkspace) {
+            return;
+        }
+        
+        let workspaceId = currentWorkspace.index();
+        this._currentWorkspaceId = workspaceId;
+        
+        console.log(`Workspace changed to: ${workspaceId}`);
+        
+        // Pause all running timers when switching workspaces
+        this._pauseAllTimers();
+        
+        // Save the current state
+        this._saveTimers();
+    }
+
     destroy() {
         if (this._timerUpdate) {
             GLib.source_remove(this._timerUpdate);
@@ -1008,6 +1073,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (this._screenLockSignal) {
             Main.screenShield.disconnect(this._screenLockSignal);
             this._screenLockSignal = null;
+        }
+
+        // Disconnect workspace signal
+        if (this._workspaceSignal) {
+            global.workspace_manager.disconnect(this._workspaceSignal);
+            this._workspaceSignal = null;
         }
 
         // Clean up settings

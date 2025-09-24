@@ -12,6 +12,7 @@ Features:
 - Selection: choose specific timers or display the total time
 - Persistent storage: timers are automatically saved and restored between sessions
 - Screen lock integration: automatically pauses all active timers when the screen is locked
+- Workspace-based tracking: optionally associate timers with specific workspaces for better organization
 - Keyboard navigation: easily edit timers using keyboard shortcuts (e.g., Tab, Enter, and Escape for editing)
 - Export current timers to CSV
 
