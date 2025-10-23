@@ -2,7 +2,7 @@
   "uuid": "tracker@aliakseiz.github.com",
   "name": "Tracker",
   "description": "A simple time tracker extension",
-  "version": 4,
+  "version": 8,
   "shell-version": [
     "45",
     "46",
