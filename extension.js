@@ -52,7 +52,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this.add_child(this._label);
 
         this.extension = extension;
-        this._settings = this.extension.getSettings('org.gnome.shell.extensions.tracker');
+        this._settings = this.extension.getSettings();
 
         this._timerUIElements = new Map();
 
@@ -1117,6 +1117,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             GLib.source_remove(this._periodicSaveId);
             this._periodicSaveId = null;
         }
+
+        // Stop backup timer
+        this._stopBackupTimer();
 
         // Disconnect screen lock signal
         if (this._screenLockSignal) {
