@@ -5,7 +5,7 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 export default class TrackerExtensionPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
-        const settings = this.getSettings('org.gnome.shell.extensions.tracker');
+        const settings = this.getSettings();
 
         // Create a new preferences page
         const page = new Adw.PreferencesPage({
