@@ -26,6 +26,9 @@
 /**
  Debug with:
  dbus-run-session -- gnome-shell --nested --wayland
+
+ Logs:
+ journalctl -f -o cat /usr/bin/gnome-shell
  */
 
 import Clutter from 'gi://Clutter';
@@ -44,13 +47,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         super._init(0.0, 'Timer Tracker');
 
         this._label = new St.Label({
-            text: 'Tracker',
-            y_align: Clutter.ActorAlign.CENTER,
+            text: 'Tracker', y_align: Clutter.ActorAlign.CENTER,
         });
         this.add_child(this._label);
 
         this.extension = extension;
-        this._settings = this.extension.getSettings('org.gnome.shell.extensions.tracker');
+        this._settings = this.extension.getSettings();
 
         this._timerUIElements = new Map();
         this._currentWorkspaceId = null;
@@ -75,7 +77,180 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._startPeriodicSave();
 
+        // Initialize backup functionality
+        this._initBackup();
+
         this._startTimers();
+    }
+
+    _initBackup() {
+        this._backupId = null;
+
+        // Load backup settings
+        this._backupEnabled = this._settings.get_boolean('backup-enabled');
+        this._backupPath = this._settings.get_string('backup-path');
+        this._backupFrequency = this._settings.get_string('backup-frequency');
+        this._backupFilenameFormat = this._settings.get_string('backup-filename-format');
+
+        // Start backup timer if enabled
+        if (this._backupEnabled) {
+            this._startBackupTimer();
+        }
+
+        // Listen for setting changes
+        this._settings.connect('changed::backup-enabled', () => {
+            this._backupEnabled = this._settings.get_boolean('backup-enabled');
+            if (this._backupEnabled) {
+                this._startBackupTimer();
+            } else {
+                this._stopBackupTimer();
+            }
+        });
+
+        this._settings.connect('changed::backup-path', () => {
+            this._backupPath = this._settings.get_string('backup-path');
+        });
+
+        this._settings.connect('changed::backup-frequency', () => {
+            this._backupFrequency = this._settings.get_string('backup-frequency');
+            if (this._backupEnabled) {
+                this._stopBackupTimer();
+                this._startBackupTimer();
+            }
+        });
+
+        this._settings.connect('changed::backup-filename-format', () => {
+            this._backupFilenameFormat = this._settings.get_string('backup-filename-format');
+        });
+    }
+
+    _startBackupTimer() {
+        this._stopBackupTimer();
+
+        // Parse the frequency string
+        const frequency = this._parseFrequency(this._backupFrequency);
+        if (frequency > 0) {
+            this._backupId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, frequency, () => {
+                this._performBackup(false); // false = automatic backup
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+    }
+
+    _stopBackupTimer() {
+        if (this._backupId) {
+            GLib.source_remove(this._backupId);
+            this._backupId = null;
+        }
+    }
+
+    _parseFrequency(frequencyString) {
+        // Parse frequency string like "1h", "30m"
+        const regex = /^(\d+)([mh])$/;
+        const match = frequencyString.match(regex);
+
+        if (!match) {
+            return 0; // Invalid format, don't schedule backup
+        }
+
+        const value = parseInt(match[1]);
+        const unit = match[2];
+
+        if (unit === 'm') {
+            return value * 60; // Convert minutes to seconds
+        } else if (unit === 'h') {
+            return value * 3600; // Convert hours to seconds
+        }
+
+        return 0;
+    }
+
+    _performBackup(showNotification = true) {
+        try {
+            const csv = this._generateCsv();
+            const filePath = this._getBackupFilePath();
+
+            if (filePath) {
+                let file = Gio.File.new_for_path(filePath);
+                let stream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
+
+                stream.write_all(csv, null);
+                stream.close(null);
+
+                // Show notification only if requested (manual backups)
+                if (showNotification) {
+                    const systemSource = MessageTray.getSystemSource();
+                    const notification = new MessageTray.Notification({
+                        source: systemSource, title: _('Tracker Backup'), body: _(`Backup saved to: ${filePath}`),
+                    });
+
+                    systemSource.addNotification(notification);
+                }
+            }
+        } catch (err) {
+            console.log(`Error performing backup: ${err.message}`);
+        }
+    }
+
+    _generateCsv() {
+        const DELIMITER = ',';
+        const NEWLINE = '\n';
+
+        // Create headers
+        let csv = `Name${DELIMITER}Time${NEWLINE}`;
+
+        // Populate rows
+        this._timers.forEach(timer => {
+            // Escape commas and wrap in quotes
+            let name = `"${timer.name.replace(/"/g, '""')}"`;
+            let time = this._formatTime(timer.timeElapsed);
+            csv += `${name}${DELIMITER}${time}${NEWLINE}`;
+        });
+
+        return csv;
+    }
+
+    _getBackupFilePath() {
+        try {
+            // Expand ~ to home directory
+            let path = this._backupPath.replace(/^~\//, GLib.get_home_dir() + '/');
+
+            // Ensure directory exists
+            const dir = Gio.File.new_for_path(path);
+            if (!dir.query_exists(null)) {
+                dir.make_directory_with_parents(null);
+            }
+
+            // Generate filename with timestamp
+            const fileName = this._formatBackupFilename();
+            const fullPath = GLib.build_filenamev([dir.get_path(), fileName]);
+
+            return fullPath;
+        } catch (err) {
+            console.log(`Error creating backup file path: ${err.message}`);
+            return null;
+        }
+    }
+
+    _formatBackupFilename() {
+        // Get current timestamp
+        const now = GLib.DateTime.new_now_local();
+
+        // Replace placeholders in filename format
+        let formatted = this._backupFilenameFormat
+            .replace(/%Y/g, now.format('%Y'))
+            .replace(/%m/g, now.format('%m'))
+            .replace(/%d/g, now.format('%d'))
+            .replace(/%H/g, now.format('%H'))
+            .replace(/%M/g, now.format('%M'))
+            .replace(/%S/g, now.format('%S'));
+
+        // Add .csv extension if not present
+        if (!formatted.endsWith('.csv')) {
+            formatted += '.csv';
+        }
+
+        return formatted;
     }
 
     _resetEditingState(timer) {
@@ -86,14 +261,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         }
 
         let {
-            item,
-            nameLabel,
-            timeLabel,
-            eyeButton,
-            playPauseButton,
-            resetButton,
-            editButton,
-            deleteButton
+            item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton
         } = uiElements;
         let nameEntry = timer.editEntries?.nameEntry;
         let timeEntry = timer.editEntries?.timeEntry;
@@ -175,8 +343,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Add settings data
         let settingsData = {
-            id: 'settings',
-            totalTimeSelected: this._totalTimeSelected
+            id: 'settings', totalTimeSelected: this._totalTimeSelected
         };
         timersData.push(JSON.stringify(settingsData));
 
@@ -200,36 +367,28 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Buttons row
         let summaryRow = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            style_class: 'summary-row',
+            reactive: false, style_class: 'summary-row',
         });
 
         let summaryWrapper = new St.BoxLayout({
-            vertical: false,
-            x_expand: true,
-            style_class: 'summary-wrapper',
+            vertical: false, x_expand: true, style_class: 'summary-wrapper',
         });
 
         // Left container for the total time eye button and label
         let leftContainer = new St.BoxLayout({
-            vertical: false,
-            x_expand: true,
-            style_class: 'left-container',
+            vertical: false, x_expand: true, style_class: 'left-container',
         });
         leftContainer.y_align = Clutter.ActorAlign.CENTER;
 
         // Right container for the action buttons
         let rightContainer = new St.BoxLayout({
-            vertical: false,
-            x_expand: false,
-            style_class: 'right-container',
+            vertical: false, x_expand: false, style_class: 'right-container',
         });
         rightContainer.y_align = Clutter.ActorAlign.CENTER;
 
         // Total time eye button
         this._totalTimeEyeIcon = new St.Icon({
-            icon_name: this._totalTimeSelected ? 'selection-mode-symbolic' : 'radio-symbolic',
-            style_class: 'timer-icon',
+            icon_name: this._totalTimeSelected ? 'selection-mode-symbolic' : 'radio-symbolic', style_class: 'timer-icon',
         });
 
         this._totalTimeEyeButton = new St.Button({child: this._totalTimeEyeIcon});
@@ -243,8 +402,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Download CSV button
         let downloadCsvIcon = new St.Icon({
-            icon_name: 'document-save-symbolic',
-            style_class: 'timer-icon',
+            icon_name: 'document-save-symbolic', style_class: 'timer-icon',
         });
         let downloadCsvButton = new St.Button({child: downloadCsvIcon});
         downloadCsvButton.connect('clicked', () => {
@@ -254,8 +412,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Pause all timers button
         let pauseAllIcon = new St.Icon({
-            icon_name: 'media-playback-pause-symbolic',
-            style_class: 'timer-icon',
+            icon_name: 'media-playback-pause-symbolic', style_class: 'timer-icon',
         });
         let pauseAllButton = new St.Button({child: pauseAllIcon});
         pauseAllButton.connect('clicked', () => {
@@ -265,8 +422,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Total time reset button
         let totalResetIcon = new St.Icon({
-            icon_name: 'edit-clear-all-symbolic',
-            style_class: 'timer-icon',
+            icon_name: 'edit-clear-all-symbolic', style_class: 'timer-icon',
         });
         let totalResetButton = new St.Button({child: totalResetIcon});
         totalResetButton.connect('clicked', () => {
@@ -276,8 +432,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Add new timer button
         let addIcon = new St.Icon({
-            icon_name: 'list-add-symbolic',
-            style_class: 'timer-icon',
+            icon_name: 'list-add-symbolic', style_class: 'timer-icon',
         });
         let addButton = new St.Button({child: addIcon});
         addButton.connect('clicked', () => {
@@ -329,14 +484,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
     _addTimerItem(timer) {
         let timerItem = new PopupMenu.PopupBaseMenuItem({
-            style_class: 'timer-item',
-            activate: false, // Prevent the menu from closing when the item is activated
+            style_class: 'timer-item', activate: false, // Prevent the menu from closing when the item is activated
         });
 
         // Eye icon
         let eyeIcon = new St.Icon({
-            icon_name: timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic',
-            style_class: 'timer-icon',
+            icon_name: timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic', style_class: 'timer-icon',
         });
         let eyeButton = new St.Button({child: eyeIcon});
         eyeButton.connect('clicked', () => {
@@ -363,25 +516,18 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Timer name
         let nameLabel = new St.Label({
-            text: timer.name,
-            x_expand: true,
-            style_class: 'timer-text',
+            text: timer.name, x_expand: true, style_class: 'timer-text',
         });
 
         // Timer time
         let timeLabel = new St.Label({
-            text: this._formatTime(timer.timeElapsed),
-            style_class: 'timer-time',
+            text: this._formatTime(timer.timeElapsed), style_class: 'timer-time',
         });
 
         // Create a container for nameLabel and timeLabel
         let labelContainer = new St.BoxLayout({
-            vertical: false,
-            x_expand: true,
-            reactive: true,        // Make it clickable
-            can_focus: true,
-            track_hover: true,
-            style_class: 'timer-label-container',
+            vertical: false, x_expand: true, reactive: true,        // Make it clickable
+            can_focus: true, track_hover: true, style_class: 'timer-label-container',
         });
 
         // Add nameLabel and timeLabel to the container
@@ -395,8 +541,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let iconName = timer.running ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
 
         let playPauseIcon = new St.Icon({
-            icon_name: iconName,
-            style_class: 'timer-icon play-button',
+            icon_name: iconName, style_class: 'timer-icon play-button',
         });
         let playPauseButton = new St.Button({child: playPauseIcon});
 
@@ -447,8 +592,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Reset button
         let resetButton = new St.Button({
             child: new St.Icon({
-                icon_name: 'edit-clear-symbolic',
-                style_class: 'timer-icon',
+                icon_name: 'edit-clear-symbolic', style_class: 'timer-icon',
             })
         });
 
@@ -461,8 +605,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Edit button
         let editButton = new St.Button({
             child: new St.Icon({
-                icon_name: 'document-edit-symbolic',
-                style_class: 'timer-icon',
+                icon_name: 'document-edit-symbolic', style_class: 'timer-icon',
             })
         });
         editButton.connect('clicked', () => {
@@ -478,8 +621,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Delete button
         let deleteButton = new St.Button({
             child: new St.Icon({
-                icon_name: 'user-trash-symbolic',
-                style_class: 'timer-icon',
+                icon_name: 'user-trash-symbolic', style_class: 'timer-icon',
             })
         });
         deleteButton.connect('clicked', () => {
@@ -586,14 +728,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _editTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
         let {
-            item,
-            nameLabel,
-            timeLabel,
-            eyeButton,
-            playPauseButton,
-            resetButton,
-            editButton,
-            deleteButton
+            item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton
         } = uiElements;
 
         // Hide the Eye, Play/Pause, Edit, and Delete buttons
@@ -605,23 +740,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Create an entry field to edit the timer name
         let nameEntry = new St.Entry({
-            text: timer.name,
-            x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER,
-            style_class: 'name-entry',
-            hint_text: 'Timer name',
-            can_focus: true,
+            text: timer.name, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'name-entry', hint_text: 'Timer name', can_focus: true,
         });
 
         // Create an entry field to edit the timer value
         let timeEntry = new St.Entry({
-            text: this._formatTime(timer.timeElapsed),
-            x_expand: false,   // Do not allow horizontal expansion
-            width: 85,
-            y_align: Clutter.ActorAlign.CENTER,
-            style_class: 'timer-entry',
-            hint_text: 'hh:mm:ss',
-            can_focus: true,
+            text: this._formatTime(timer.timeElapsed), x_expand: false,   // Do not allow horizontal expansion
+            width: 85, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-entry', hint_text: 'hh:mm:ss', can_focus: true,
         });
 
         // Replace the nameLabel and timeLabel with the entry fields
@@ -637,17 +762,17 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             width: 150,
             can_focus: true,
         });
-        
+
         // Get available workspaces for the dropdown
         let workspaceManager = global.workspace_manager;
         let totalWorkspaces = workspaceManager.get_n_workspaces();
-        
+
         // Add "No Workspace" option
         workspaceSelect.append_text("No Workspace");
         if (timer.workspaceId === null) {
             workspaceSelect.set_selected(0);
         }
-        
+
         // Add workspace options
         for (let i = 0; i < totalWorkspaces; i++) {
             workspaceSelect.append_text(`Workspace ${i}`);
@@ -658,15 +783,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Create Save and Cancel buttons
         let saveIcon = new St.Icon({
-            y_align: Clutter.ActorAlign.CENTER,
-            icon_name: 'document-save-symbolic',
-            style_class: 'timer-icon',
+            y_align: Clutter.ActorAlign.CENTER, icon_name: 'document-save-symbolic', style_class: 'timer-icon',
         });
         let saveButton = new St.Button({child: saveIcon});
         let cancelIcon = new St.Icon({
-            y_align: Clutter.ActorAlign.CENTER,
-            icon_name: 'process-stop-symbolic',
-            style_class: 'timer-icon',
+            y_align: Clutter.ActorAlign.CENTER, icon_name: 'process-stop-symbolic', style_class: 'timer-icon',
         });
         let cancelButton = new St.Button({child: cancelIcon});
 
@@ -809,13 +930,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Get current workspace ID
         let currentWorkspace = global.workspace_manager.get_active_workspace();
         let workspaceId = currentWorkspace ? currentWorkspace.index() : 0;
-        
+
         let newTimer = {
             id: GLib.uuid_string_random(), // Assign a unique ID
-            name: '<empty>',
-            timeElapsed: 0,
-            running: false,
-            selected: false,
+            name: '<empty>', timeElapsed: 0, running: false, selected: false,
             workspaceId: null // Default to no workspace association
         };
         this._timers.push(newTimer);
@@ -899,9 +1017,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 // Show total time by default
                 this._totalTimeSelected = true;
                 this._totalTimeEyeIcon.icon_name = 'selection-mode-symbolic';
-                this._label.text = this._formatTime(
-                    this._timers.reduce((sum, timer) => sum + this._getTimerTotalTime(timer, currentTime), 0)
-                );
+                this._label.text = this._formatTime(this._timers.reduce((sum, timer) => sum + this._getTimerTotalTime(timer, currentTime), 0));
             }
         }
     }
@@ -1005,10 +1121,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             const systemSource = MessageTray.getSystemSource();
             const notification = new MessageTray.Notification({
                 // The source of the notification
-                source: systemSource,
-                // A title for the notification
-                title: _('Tracker'),
-                // The content of the notification
+                source: systemSource, // A title for the notification
+                title: _('Tracker'), // The content of the notification
                 body: _(`CSV exported to: ${filePath}`),
             });
             notification.connect('activated', _notification => {
@@ -1041,15 +1155,15 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (!currentWorkspace) {
             return;
         }
-        
+
         let workspaceId = currentWorkspace.index();
         this._currentWorkspaceId = workspaceId;
-        
+
         console.log(`Workspace changed to: ${workspaceId}`);
-        
+
         // Pause all running timers when switching workspaces
         this._pauseAllTimers();
-        
+
         // Save the current state
         this._saveTimers();
     }
@@ -1068,6 +1182,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             GLib.source_remove(this._periodicSaveId);
             this._periodicSaveId = null;
         }
+
+        // Stop backup timer
+        this._stopBackupTimer();
 
         // Disconnect screen lock signal
         if (this._screenLockSignal) {

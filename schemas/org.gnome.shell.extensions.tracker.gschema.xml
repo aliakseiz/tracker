@@ -6,5 +6,25 @@
             <summary>List of timers</summary>
             <description>JSON-encoded list of timers.</description>
         </key>
+        <key name="backup-enabled" type="b">
+            <default>false</default>
+            <summary>Enable automatic backup</summary>
+            <description>Whether to automatically backup timers at configured intervals.</description>
+        </key>
+        <key name="backup-path" type="s">
+            <default>"~/timers"</default>
+            <summary>Backup export path</summary>
+            <description>Directory where backup files will be saved.</description>
+        </key>
+        <key name="backup-frequency" type="s">
+            <default>"1h"</default>
+            <summary>Backup frequency</summary>
+            <description>How often to perform automatic backups (e.g. 1h, 24h, 30m).</description>
+        </key>
+        <key name="backup-filename-format" type="s">
+            <default>"timers_%Y-%m-%d_%H-%M-%S.csv"</default>
+            <summary>Backup filename format</summary>
+            <description>Filename format for backup files with timestamp placeholders.</description>
+        </key>
     </schema>
 </schemalist>

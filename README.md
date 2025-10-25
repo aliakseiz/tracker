@@ -15,10 +15,33 @@ Features:
 - Workspace-based tracking: optionally associate timers with specific workspaces for better organization
 - Keyboard navigation: easily edit timers using keyboard shortcuts (e.g., Tab, Enter, and Escape for editing)
 - Export current timers to CSV
+- Automatic backup: automatically export timers to CSV at configurable intervals 
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-02.png)
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-03.png)
+
+## Backup Configuration
+
+The extension now supports automatic backup functionality:
+
+![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/backup-01.png)
+
+1. **Enable automatic backup**: Toggle the "Enable automatic backup" setting
+2. **Configure export path**: Set the directory where backup files will be saved (e.g., `~/timers` or `/home/user/backups`)
+3. **Set export frequency**: Define how often backups should occur using format like:
+   - `1h` for every hour
+   - `30m` for every 30 minutes  
+   - `24h` for every day
+4. **Customize filename format**: Use timestamp placeholders in filenames:
+   - `%Y` - Year (e.g., 2025)
+   - `%m` - Month (e.g., 09) 
+   - `%d` - Day (e.g., 24)
+   - `%H` - Hour (e.g., 14)
+   - `%M` - Minute (e.g., 30)
+   - `%S` - Second (e.g., 45)
+
+Backup files are saved in CSV format with headers "Name" and "Time".
 
 # Install
 

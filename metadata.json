@@ -2,12 +2,14 @@
   "uuid": "tracker@aliakseiz.github.com",
   "name": "Tracker",
   "description": "A simple time tracker extension",
-  "version": 3,
+  "version": 10,
   "shell-version": [
     "45",
     "46",
     "47",
-    "48"
+    "48",
+    "49"
   ],
-  "url": "https://github.com/aliakseiz/tracker"
+  "url": "https://github.com/aliakseiz/tracker",
+  "settings-schema": "org.gnome.shell.extensions.tracker"
 }
