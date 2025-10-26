@@ -972,13 +972,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         handleKeyPress(nameEntry, timeEntry, null);
         handleKeyPress(timeEntry, null, nameEntry);
 
-        // Auto-focus the nameEntry field (with delay to avoid Clutter warnings)
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-            if (nameEntry && nameEntry.get_stage()) {
-                nameEntry.grab_key_focus();
-            }
-            return GLib.SOURCE_REMOVE;
-        });
+        if (nameEntry && nameEntry.get_stage()) {
+            nameEntry.grab_key_focus();
+        }
 
         // Store the edit mode state and entry fields
         timer.isEditing = true;
