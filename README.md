@@ -1,6 +1,6 @@
 # Tracker
 
-Simple time tracking extension for Gnome.
+Simple time tracking extension for Gnome 45-49.
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-01.gif)
 
