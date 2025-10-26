@@ -12,11 +12,10 @@ Features:
 - Selection: choose specific timers or display the total time
 - Persistent storage: timers are automatically saved and restored between sessions
 - Screen lock integration: automatically pauses all active timers when the screen is locked
-- Workspace-based tracking: optionally associate timers with specific workspaces for better organization
-- Keyboard navigation: easily edit timers using keyboard shortcuts (e.g., Tab, Enter, and Escape for editing)
-- Export current timers to CSV
+- Workspace-based tracking: optionally associate timers with specific workspaces to automatically start/pause them upon switching
+- Keyboard navigation: edit timers using keyboard shortcuts (e.g., Tab, Enter, and Escape for editing)
+- Export current timers to CSV manually
 - Automatic backup: automatically export timers to CSV at configurable intervals 
-- Associate timers with specific workspaces to automatically start/pause them upon switching
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-02.png)
 
