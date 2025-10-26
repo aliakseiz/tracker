@@ -83,3 +83,13 @@
     /* Align items to the end (right side) */
     justify-content: flex-end;
 }
+
+.workspace-indicator {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 2px 8px;
+    margin-left: 8px;
+    margin-right: 8px;
+    font-size: 0.9em;
+    font-weight: bold;
+}
