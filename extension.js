@@ -42,6 +42,12 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 
+const PauseType = {
+    MANUAL: 'manual', // user clicked pause (no auto-resume)
+    AUTO: 'auto',     // screen lock or workspace switch (auto-resume)
+    SILENT: 'silent', // destroy (no effect on auto-resume)
+};
+
 const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _init(extension) {
         super._init(0.0, 'Timer Tracker');
@@ -55,7 +61,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._settings = this.extension.getSettings();
 
         this._timerUIElements = new Map();
-        this._currentWorkspaceId = null;
 
         this._totalTimeSelected = true; // Default to total time selected
         this._loadTimers();
@@ -66,8 +71,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._onMenuClosed();
         });
 
-        this._screenLockSignal = Main.screenShield.connect('locked', () => {
-            this._onScreenLocked();
+        this._screenShieldSignal = Main.screenShield.connect('active-changed', (shield, active) => {
+            if (active) {
+                this._onScreenLocked();
+            } else {
+                this._onScreenUnlocked();
+            }
         });
 
         // Connect to workspace change signal
@@ -81,6 +90,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._initBackup();
 
         this._startTimers();
+
+        this._syncWorkspaces();
     }
 
     _initBackup() {
@@ -340,6 +351,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 // Set timers to paused state upon loading
                 timer.running = false;
                 timer.lastUpdateTime = null;
+                if (timer.autoResume === undefined) {
+                    timer.autoResume = false;
+                }
+
                 this._timers.push(timer);
             }
         });
@@ -427,7 +442,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
         let pauseAllButton = new St.Button({child: pauseAllIcon});
         pauseAllButton.connect('clicked', () => {
-            this._pauseAllTimers();
+            this._pauseAllTimers(PauseType.MANUAL);
         });
         rightContainer.add_child(pauseAllButton);
 
@@ -565,7 +580,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let iconName;
         if (timer.running) {
             iconName = 'media-playback-pause-symbolic';
-        } else if (timer.wasRunningBeforePause) {
+        } else if (timer.autoResume) {
             iconName = 'view-refresh-symbolic'; // Auto-paused (circular arrow icon)
         } else {
             iconName = 'media-playback-start-symbolic'; // Manually paused (play icon)
@@ -585,7 +600,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.timeElapsed += elapsed;
                 timer.running = false;
                 timer.lastUpdateTime = null;
-                timer.wasRunningBeforePause = false;
+                timer.autoResume = false;
 
                 // Update icon to "Play"
                 playPauseIcon.icon_name = 'media-playback-start-symbolic';
@@ -594,7 +609,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 // Start timer
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
-                timer.wasRunningBeforePause = false;
+                timer.autoResume = typeof timer.workspaceId === 'number';
 
                 // Update icon to "Pause"
                 playPauseIcon.icon_name = 'media-playback-pause-symbolic';
@@ -723,7 +738,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         timer.timeElapsed += elapsed;
         timer.running = false;
         timer.lastUpdateTime = null;
-        timer.wasRunningBeforePause = false;
+        timer.autoResume = false;
 
         // Update UI
         if (uiElements && uiElements.playPauseIcon) {
@@ -1015,35 +1030,42 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
 
-    _pauseAllTimers() {
+    _pauseAllTimers(pauseType = PauseType.MANUAL) {
         let currentTime = GLib.get_real_time();
         this._timers.forEach(timer => {
             if (timer.running) {
-                let currentTime = GLib.get_real_time();
                 let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
                 timer.timeElapsed += elapsed;
                 timer.running = false;
                 timer.lastUpdateTime = null;
-                timer.wasRunningBeforePause = false; // Manual pause via pause all
+
+                const hasWorkspace = typeof timer.workspaceId === 'number';
+                if (pauseType !== PauseType.MANUAL && hasWorkspace) {
+                    timer.autoResume = true;
+                }
             }
-            timer.running = false; // Ensure all timers are set to not running
+
+            if (pauseType === PauseType.MANUAL) {
+                timer.autoResume = false;
+            }
 
             // Update UI
             let uiElements = this._timerUIElements.get(timer.id);
             if (uiElements) {
-                if (uiElements.playPauseButton) {
-                    // Update icon to "Play"
-                    uiElements.playPauseIcon.icon_name = 'media-playback-start-symbolic';
+                if (uiElements.playPauseIcon) {
+                    uiElements.playPauseIcon.icon_name = timer.autoResume
+                        ? 'view-refresh-symbolic'
+                        : 'media-playback-start-symbolic';
                 }
+
                 if (uiElements.timeLabel) {
                     uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
                 }
+
                 if (uiElements.item) {
-                    // Add 'timer-paused' class
                     uiElements.item.add_style_class_name('timer-paused');
                 }
             } else {
-                // Log a warning if UI elements are missing
                 console.log(`Warning: UI elements not found for timer "${timer.name}"`);
             }
         });
@@ -1162,8 +1184,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _onScreenLocked() {
-        this._pauseAllTimers();
-        this._saveTimers();
+        this._pauseAllTimers(PauseType.AUTO);
+    }
+
+    _onScreenUnlocked() {
+        this._syncWorkspaces();
     }
 
     _downloadCsv() {
@@ -1224,53 +1249,45 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _onWorkspaceChanged(wm, from, to) {
-        // Get the current workspace ID
+        this._syncWorkspaces();
+    }
+
+    _syncWorkspaces() {
         let currentWorkspace = global.workspace_manager.get_active_workspace();
         if (!currentWorkspace) {
             return;
         }
 
         let workspaceId = currentWorkspace.index();
-        this._currentWorkspaceId = workspaceId;
-
-        console.log(`Workspace changed to: ${workspaceId}`);
-
         let currentTime = GLib.get_real_time();
 
-        // Pause timers that don't belong to this workspace and aren't global
-        // Start timers that belong to this workspace and were running before
         this._timers.forEach(timer => {
             let uiElements = this._timerUIElements.get(timer.id);
             if (!uiElements) return;
 
-            // If timer is workspace-specific and we switched away from its workspace, pause it
+            // Pause timers that don't belong to this workspace
             if (timer.workspaceId !== null && timer.workspaceId !== workspaceId) {
                 if (timer.running) {
-                    // Store that this timer was auto-paused
-                    timer.wasRunningBeforePause = true;
+                    timer.autoResume = true;
 
-                    // Pause the timer
                     let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
                     timer.timeElapsed += elapsed;
                     timer.running = false;
                     timer.lastUpdateTime = null;
 
-                    // Update UI
                     if (uiElements.playPauseIcon) {
-                        uiElements.playPauseIcon.icon_name = 'view-refresh-symbolic'; // Auto-paused (circular arrow)
+                        uiElements.playPauseIcon.icon_name = 'view-refresh-symbolic';
                     }
                     if (uiElements.item) {
                         uiElements.item.add_style_class_name('timer-paused');
                     }
                 }
             }
-            // If timer belongs to this workspace and was auto-paused, resume it
-            else if (timer.workspaceId === workspaceId && timer.wasRunningBeforePause) {
-                timer.wasRunningBeforePause = false;
+            // Resume auto-paused timers that belong to this workspace
+            else if (timer.workspaceId === workspaceId && timer.autoResume) {
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
 
-                // Update UI
                 if (uiElements.playPauseIcon) {
                     uiElements.playPauseIcon.icon_name = 'media-playback-pause-symbolic';
                 }
@@ -1280,7 +1297,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             }
         });
 
-        // Save the current state
         this._saveTimers();
     }
 
@@ -1290,8 +1306,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._timerUpdate = null;
         }
 
-        // Pause all timers and save the state
-        this._pauseAllTimers();
+        this._pauseAllTimers(PauseType.SILENT);
         this._saveTimers();
 
         if (this._periodicSaveId) {
@@ -1299,16 +1314,15 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._periodicSaveId = null;
         }
 
-        // Stop backup timer
         this._stopBackupTimer();
 
-        // Disconnect screen lock signal
-        if (this._screenLockSignal) {
-            Main.screenShield.disconnect(this._screenLockSignal);
-            this._screenLockSignal = null;
+        // Disconnect screen lock signals
+        if (this._screenShieldSignal) {
+            Main.screenShield.disconnect(this._screenShieldSignal);
+            this._screenShieldSignal = null;
         }
 
-        // Disconnect workspace signal
+        // Workspace signals
         if (this._workspaceSignal) {
             global.workspace_manager.disconnect(this._workspaceSignal);
             this._workspaceSignal = null;
