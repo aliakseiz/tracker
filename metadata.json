@@ -11,5 +11,9 @@
     "49"
   ],
   "url": "https://github.com/aliakseiz/tracker",
-  "settings-schema": "org.gnome.shell.extensions.tracker"
+  "settings-schema": "org.gnome.shell.extensions.tracker",
+  "donations": {
+    "kofi": "aliakseiz",
+    "paypal": "aliakseimiller"
+  }
 }
