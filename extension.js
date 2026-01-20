@@ -25,7 +25,7 @@
 
 /**
  Debug with:
- dbus-run-session -- gnome-shell --nested --wayland
+ dbus-run-session gnome-shell --devkit --wayland
 
  Logs:
  journalctl -f -o cat /usr/bin/gnome-shell
@@ -82,6 +82,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Connect to workspace change signal
         this._workspaceSignal = global.workspace_manager.connect('active-workspace-changed', (wm, from, to) => {
             this._onWorkspaceChanged(wm, from, to);
+        });
+
+        // Listen for settings changes from prefs dialog
+        this._timerSettingsChangedHandler = this._settings.connect('changed::timers', () => {
+            this._onTimersSettingsChanged();
         });
 
         this._startPeriodicSave();
@@ -272,7 +277,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         }
 
         let {
-            item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton
+            mainRow, nameLabel, timeLabel, eyeButton, expandButton, clearButton, editButton, deleteButton, actionsRow
         } = uiElements;
 
         // Check if timer is actually in editing mode
@@ -282,7 +287,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         let nameEntry = timer.editEntries?.nameEntry;
         let timeEntry = timer.editEntries?.timeEntry;
-        let workspaceButton = timer.workspaceButton;
         let saveButton = timer.saveButton;
         let cancelButton = timer.cancelButton;
 
@@ -301,26 +305,21 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             }
         }
 
-        // Remove workspace button, Save and Cancel buttons
-        if (workspaceButton && workspaceButton.get_parent && workspaceButton.get_parent() === item) {
-            item.remove_child(workspaceButton);
+        // Remove Save and Cancel buttons from actions row
+        if (saveButton && saveButton.get_parent && saveButton.get_parent() === actionsRow) {
+            actionsRow.remove_child(saveButton);
         }
-        if (saveButton && saveButton.get_parent && saveButton.get_parent() === item) {
-            item.remove_child(saveButton);
-        }
-        if (cancelButton && cancelButton.get_parent && cancelButton.get_parent() === item) {
-            item.remove_child(cancelButton);
+        if (cancelButton && cancelButton.get_parent && cancelButton.get_parent() === actionsRow) {
+            actionsRow.remove_child(cancelButton);
         }
 
         // Restore padding to normal state
-        item.remove_style_class_name('timer-edit');
-        // Restore buttons color
-        item.add_style_class_name('timer-paused');
+        mainRow.remove_style_class_name('timer-edit');
 
         // Show the previously hidden elements
         eyeButton.show();
-        playPauseButton.show();
-        resetButton.show();
+        expandButton.show();
+        clearButton.show();
         editButton.show();
         deleteButton.show();
         timeLabel.show();
@@ -328,7 +327,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Reset the editing state
         timer.isEditing = false;
         timer.editEntries = null;
-        timer.workspaceButton = null;
         timer.saveButton = null;
         timer.cancelButton = null;
     }
@@ -402,15 +400,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Left container for the total time eye button and label
         let leftContainer = new St.BoxLayout({
-            vertical: false, x_expand: true, style_class: 'left-container',
+            vertical: false, x_expand: true, style_class: 'left-container', y_align: Clutter.ActorAlign.CENTER,
         });
-        leftContainer.y_align = Clutter.ActorAlign.CENTER;
 
         // Right container for the action buttons
         let rightContainer = new St.BoxLayout({
-            vertical: false, x_expand: false, style_class: 'right-container',
+            vertical: false, x_expand: false, style_class: 'right-container', y_align: Clutter.ActorAlign.CENTER,
         });
-        rightContainer.y_align = Clutter.ActorAlign.CENTER;
 
         // Total time eye button
         this._totalTimeEyeIcon = new St.Icon({
@@ -423,54 +419,44 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
         summaryRow.add_child(this._totalTimeEyeButton);
 
-        this._totalTimeLabel = new St.Label({text: 'Total: 00:00:00', x_expand: true});
+        this._totalTimeLabel = new St.Label({text: 'Total: 00:00:00', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         summaryRow.add_child(this._totalTimeLabel);
 
         // Download CSV button
-        let downloadCsvIcon = new St.Icon({
-            icon_name: 'document-save-symbolic', style_class: 'timer-icon',
-        });
-        let downloadCsvButton = new St.Button({child: downloadCsvIcon});
+        let downloadCsvButton = new St.Button({child: new St.Icon({icon_name: 'document-save-symbolic'}), style_class: 'timer-icon-button button'});
         downloadCsvButton.connect('clicked', () => {
             this._downloadCsv();
         });
         rightContainer.add_child(downloadCsvButton);
 
         // Pause all timers button
-        let pauseAllIcon = new St.Icon({
-            icon_name: 'media-playback-pause-symbolic', style_class: 'timer-icon',
+        let pauseAllButton = new St.Button({
+            child: new St.Icon({icon_name: 'media-playback-pause-symbolic'}), style_class: 'timer-icon-button button'
         });
-        let pauseAllButton = new St.Button({child: pauseAllIcon});
         pauseAllButton.connect('clicked', () => {
             this._pauseAllTimers(PauseType.MANUAL);
         });
         rightContainer.add_child(pauseAllButton);
 
         // Total time reset button
-        let totalResetIcon = new St.Icon({
-            icon_name: 'edit-clear-all-symbolic', style_class: 'timer-icon',
-        });
-        let totalResetButton = new St.Button({child: totalResetIcon});
+        let totalResetButton = new St.Button({child: new St.Icon({icon_name: 'edit-clear-all-symbolic'}), style_class: 'timer-icon-button button'});
         totalResetButton.connect('clicked', () => {
             this._resetAllTimers();
         });
         rightContainer.add_child(totalResetButton);
 
         // Add new timer button
-        let addIcon = new St.Icon({
-            icon_name: 'list-add-symbolic', style_class: 'timer-icon',
-        });
-        let addButton = new St.Button({child: addIcon});
+        let addButton = new St.Button({child: new St.Icon({icon_name: 'list-add-symbolic'}), style_class: 'timer-icon-button button'});
         addButton.connect('clicked', () => {
             this._addNewTimer();
         });
         rightContainer.add_child(addButton);
 
-// Assemble the buttons container
+        // Assemble the buttons container
         summaryWrapper.add_child(leftContainer);
         summaryWrapper.add_child(rightContainer);
 
-// Add the assembled container to the summaryRow
+        // Add to summary row
         summaryRow.add_child(summaryWrapper);
         this.menu.addMenuItem(summaryRow);
     }
@@ -509,16 +495,24 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
 
     _addTimerItem(timer) {
-        let timerItem = new PopupMenu.PopupBaseMenuItem({
-            style_class: 'timer-item', activate: false, // Prevent the menu from closing when the item is activated
+        // Initialize expanded state if not already set
+        if (timer.expanded === undefined) {
+            timer.expanded = false;
+        }
+
+        // First row, main timer info
+        let timerMainRow = new PopupMenu.PopupBaseMenuItem({
+            style_class: 'timer-item-row', activate: false, reactive: true, can_focus: true,
         });
 
-        // Eye icon
-        let eyeIcon = new St.Icon({
-            icon_name: timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic', style_class: 'timer-icon',
-        });
-        let eyeButton = new St.Button({child: eyeIcon});
-        eyeButton.connect('clicked', () => {
+        // Checkbox icon
+        let eyeIcon = new St.Icon({icon_name: timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic', style_class: 'timer-icon'});
+        let eyeButton = new St.Button({child: eyeIcon, style_class: 'timer-selector'});
+
+        // Mark this button as the eye button for identification
+        eyeButton._isEyeButton = true;
+
+        eyeButton.connect('clicked', (button) => {
             timer.selected = !timer.selected;
             eyeIcon.icon_name = timer.selected ? 'selection-mode-symbolic' : 'radio-symbolic';
 
@@ -538,43 +532,87 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._updatePanelLabel();
             this._saveTimers();
         });
-        timerItem.add_child(eyeButton);
 
         // Timer name
         let nameLabel = new St.Label({
-            text: timer.name, x_expand: true, style_class: 'timer-text',
+            text: timer.name, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-text', reactive: false,
         });
 
         // Timer time
         let timeLabel = new St.Label({
-            text: this._formatTime(timer.timeElapsed), style_class: 'timer-time',
+            text: this._formatTime(timer.timeElapsed), y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-time', reactive: false,
         });
 
-        // Workspace indicator (only show if workspace is assigned)
-        let workspaceIndicator = null;
-        if (timer.workspaceId !== null && timer.workspaceId !== undefined) {
-            workspaceIndicator = new St.Label({
-                text: `${timer.workspaceId}`, style_class: 'workspace-indicator',
+        // Expand/Collapse button
+        let expandIcon = new St.Icon({
+            icon_name: timer.expanded ? 'pan-down-symbolic' : 'pan-end-symbolic',
+        });
+        let expandButton = new St.Button({child: expandIcon, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-icon'});
+
+        // Function to toggle timer expansion
+        const toggleExpanded = () => {
+            // Auto-collapse other timers
+            this._timers.forEach(t => {
+                if (t.id !== timer.id && t.expanded) {
+                    t.expanded = false;
+                    let uiElements = this._timerUIElements.get(t.id);
+                    if (uiElements && uiElements.expandIcon && uiElements.actionsRow) {
+                        this._collapseTimer(t, uiElements);
+                    }
+                }
             });
-        }
 
-        // Create a container for nameLabel and timeLabel
-        let labelContainer = new St.BoxLayout({
-            vertical: false, x_expand: true, reactive: true,        // Make it clickable
-            can_focus: true, track_hover: true, style_class: 'timer-label-container',
+            // Toggle current timer
+            timer.expanded = !timer.expanded;
+            expandIcon.icon_name = timer.expanded ? 'pan-down-symbolic' : 'pan-end-symbolic';
+
+            if (timer.expanded) {
+                this._expandTimer(timer, timerActionsRow, expandIcon);
+            } else {
+                this._collapseTimer(timer, {actionsRow: timerActionsRow, expandIcon: expandIcon});
+            }
+        };
+
+        expandButton.connect('clicked', () => {
+            toggleExpanded();
         });
 
-        // Add nameLabel and timeLabel to the container
-        labelContainer.add_child(nameLabel);
-        labelContainer.add_child(timeLabel);
+        // Vertical container for both rows (main + actions)
+        let timerVerticalContainer = new St.BoxLayout({
+            vertical: true, style_class: 'timer-vertical-container', x_expand: true,
+        });
 
-        // Add workspace indicator if it exists
-        if (workspaceIndicator) {
-            labelContainer.add_child(workspaceIndicator);
-        }
+        // Main row
+        let timerMainContent = new St.BoxLayout({
+            vertical: false, style_class: 'timer-main-content', x_expand: true, reactive: true, can_focus: true,
+        });
 
-        // Add the container to the timerItem
-        timerItem.add_child(labelContainer);
+        // Add directly to main row
+        timerMainContent.add_child(eyeButton);
+
+        // Expandable container
+        let expandableContainer = new St.BoxLayout({
+            vertical: false, style_class: 'timer-expandable-container', x_expand: true, reactive: true, can_focus: true,
+        });
+
+        // Add remaining elements to expandable
+        expandableContainer.add_child(nameLabel);
+        expandableContainer.add_child(timeLabel);
+        expandableContainer.add_child(expandButton);
+
+        // Add to main content
+        timerMainContent.add_child(expandableContainer);
+        timerVerticalContainer.add_child(timerMainContent);
+
+        // Second row, action buttons
+        let timerActionsRow = new St.BoxLayout({
+            vertical: false, style_class: 'timer-actions-row', x_align: Clutter.ActorAlign.END,  // Right-align
+            visible: timer.expanded, opacity: timer.expanded ? 255 : 0, x_expand: true,
+        });
+
+        // Add actions to main row
+        timerVerticalContainer.add_child(timerActionsRow);
+        timerMainRow.actor.add_child(timerVerticalContainer);
 
         // Play/Pause button
         let iconName;
@@ -586,10 +624,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             iconName = 'media-playback-start-symbolic'; // Manually paused (play icon)
         }
 
-        let playPauseIcon = new St.Icon({
-            icon_name: iconName, style_class: 'timer-icon play-button',
-        });
-        let playPauseButton = new St.Button({child: playPauseIcon});
+        let playPauseIcon = new St.Icon({icon_name: iconName});
+        let playPauseButton = new St.Button({child: playPauseIcon, style_class: 'timer-icon-button button'});
 
         // Function to toggle the timer state
         const toggleTimerState = () => {
@@ -604,7 +640,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
                 // Update icon to "Play"
                 playPauseIcon.icon_name = 'media-playback-start-symbolic';
-                timerItem.add_style_class_name('timer-paused');
+                timerMainRow.add_style_class_name('timer-paused');
             } else {
                 // Start timer
                 timer.running = true;
@@ -613,49 +649,29 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
                 // Update icon to "Pause"
                 playPauseIcon.icon_name = 'media-playback-pause-symbolic';
-                timerItem.remove_style_class_name('timer-paused');
+                timerMainRow.remove_style_class_name('timer-paused');
             }
             this._saveTimers();
         };
 
-        // Connect the click handler to the Play/Pause button
         playPauseButton.connect('clicked', () => {
             toggleTimerState();
         });
 
-        // Connect the click handler to the label container
-        labelContainer.connect('button-press-event', (actor, event) => {
-            // Prevent the menu from closing
-            // event.stop_propagation();
+        timerActionsRow.add_child(playPauseButton);
 
-            // Toggle the timer state
-            toggleTimerState();
+        // Clear button
+        let clearButton = new St.Button({child: new St.Icon({icon_name: 'edit-clear-symbolic'}), style_class: 'timer-icon-button button'});
 
-            // Prevent the menu from closing by stopping event propagation
-            return Clutter.EVENT_STOP;
-        });
-
-        timerItem.add_child(playPauseButton);
-
-        // Reset button
-        let resetButton = new St.Button({
-            child: new St.Icon({
-                icon_name: 'edit-clear-symbolic', style_class: 'timer-icon',
-            })
-        });
-
-        resetButton.connect('clicked', () => {
+        clearButton.connect('clicked', () => {
             this._resetTimer(timer);
         });
 
-        timerItem.add_child(resetButton);
+        timerActionsRow.add_child(clearButton);
 
         // Edit button
-        let editButton = new St.Button({
-            child: new St.Icon({
-                icon_name: 'document-edit-symbolic', style_class: 'timer-icon',
-            })
-        });
+        let editButton = new St.Button({child: new St.Icon({icon_name: 'document-edit-symbolic'}), style_class: 'timer-icon-button button'});
+
         editButton.connect('clicked', () => {
             // Pause the timer if it's running
             if (timer.running) {
@@ -664,48 +680,83 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._editTimer(timer);
         });
 
-        timerItem.add_child(editButton);
+        timerActionsRow.add_child(editButton);
 
         // Delete button
-        let deleteButton = new St.Button({
-            child: new St.Icon({
-                icon_name: 'user-trash-symbolic', style_class: 'timer-icon',
-            })
-        });
-        deleteButton.connect('clicked', () => {
-            this._removeTimer(timer, timerItem);
-        });
-        timerItem.add_child(deleteButton);
+        let deleteButton = new St.Button({child: new St.Icon({icon_name: 'user-trash-symbolic'}), style_class: 'timer-icon-button button'});
 
-        // Hover highlight
-        timerItem.actor.connect('enter-event', () => {
-            timerItem.actor.add_style_pseudo_class('highlighted');
+        deleteButton.connect('clicked', () => {
+            this._removeTimer(timer, timerMainRow);
         });
-        timerItem.actor.connect('leave-event', () => {
-            timerItem.actor.remove_style_pseudo_class('highlighted');
+
+        timerActionsRow.add_child(deleteButton);
+
+        // Hover highlight on main row
+        timerMainRow.actor.connect('enter-event', () => {
+            timerMainRow.actor.add_style_pseudo_class('highlighted');
+        });
+        timerMainRow.actor.connect('leave-event', () => {
+            timerMainRow.actor.remove_style_pseudo_class('highlighted');
+        });
+
+        // Connect expand/collapse to clicking on the expandable container
+        expandableContainer.connect('button-press-event', (actor, event) => {
+            toggleExpanded();
+            return Clutter.EVENT_STOP;
+        });
+
+        // Also connect to nameLabel and timeLabel for clicks
+        nameLabel.connect('button-press-event', (actor, event) => {
+            toggleExpanded();
+            return Clutter.EVENT_STOP;
+        });
+
+        timeLabel.connect('button-press-event', (actor, event) => {
+            toggleExpanded();
+            return Clutter.EVENT_STOP;
         });
 
         // Apply 'timer-paused' class if the timer is paused
         if (!timer.running) {
-            timerItem.add_style_class_name('timer-paused');
+            timerMainRow.add_style_class_name('timer-paused');
         }
 
-
-        this._timersSection.addMenuItem(timerItem);
+        this._timersSection.addMenuItem(timerMainRow);
 
         // Store UI elements in the Map
         this._timerUIElements.set(timer.id, {
-            item: timerItem,
+            item: timerMainRow,
+            mainRow: timerMainRow,
+            actionsRow: timerActionsRow,
             nameLabel: nameLabel,
             timeLabel: timeLabel,
-            workspaceIndicator: workspaceIndicator,
             eyeButton: eyeButton,
+            expandButton: expandButton,
+            expandIcon: expandIcon,
             playPauseButton: playPauseButton,
             playPauseIcon: playPauseIcon,
-            resetButton: resetButton,
+            clearButton: clearButton,
             editButton: editButton,
             deleteButton: deleteButton
         });
+    }
+
+    _expandTimer(timer, actionsRow, expandIcon) {
+        if (!actionsRow) return;
+
+        // Show the actions row instantly
+        actionsRow.visible = true;
+        actionsRow.opacity = 255;
+    }
+
+    _collapseTimer(timer, uiElements) {
+        if (!uiElements || !uiElements.actionsRow) return;
+
+        let actionsRow = uiElements.actionsRow;
+
+        // Hide the actions row instantly
+        actionsRow.opacity = 0;
+        actionsRow.visible = false;
     }
 
     _resetTimer(timer) {
@@ -778,13 +829,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _editTimer(timer) {
         let uiElements = this._timerUIElements.get(timer.id);
         let {
-            item, nameLabel, timeLabel, eyeButton, playPauseButton, resetButton, editButton, deleteButton
+            mainRow, nameLabel, timeLabel, eyeButton, expandButton, clearButton, editButton, deleteButton, actionsRow
         } = uiElements;
 
-        // Hide the Eye, Play/Pause, Edit, and Delete buttons
+        // Hide the buttons
         eyeButton.hide();
-        playPauseButton.hide();
-        resetButton.hide();
+        expandButton.hide();
+        clearButton.hide();
         editButton.hide();
         deleteButton.hide();
 
@@ -806,52 +857,19 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         let timeEntryParent = timeLabel.get_parent();
         timeEntryParent.replace_child(timeLabel, timeEntry);
 
-        // Create workspace selection button
-        let workspaceManager = global.workspace_manager;
-        let totalWorkspaces = workspaceManager.get_n_workspaces();
-
-        // Initialize current workspace selection properly
-        let currentWorkspaceSelection = timer.workspaceId !== null && timer.workspaceId !== undefined ? timer.workspaceId : -1;
-        let workspaceText = currentWorkspaceSelection === -1 ? "No WS" : `WS ${currentWorkspaceSelection}`;
-
-        let workspaceButton = new St.Button({
-            label: workspaceText, style_class: 'workspace-button', x_expand: false, y_align: Clutter.ActorAlign.CENTER, can_focus: true,
-        });
-
-        workspaceButton.connect('clicked', () => {
-            // Cycle through workspaces: No Workspace -> Workspace 0 -> Workspace 1 -> ... -> No Workspace
-            currentWorkspaceSelection++;
-            if (currentWorkspaceSelection >= totalWorkspaces) {
-                currentWorkspaceSelection = -1; // Back to "No Workspace"
-            }
-
-            if (currentWorkspaceSelection === -1) {
-                workspaceButton.label = "No WS";
-            } else {
-                workspaceButton.label = `WS ${currentWorkspaceSelection}`;
-            }
-        });
-
-        // Add workspace button to the item (not to timeEntryParent)
-        item.add_child(workspaceButton);
-
         // Create Save and Cancel buttons
-        let saveIcon = new St.Icon({
-            y_align: Clutter.ActorAlign.CENTER, icon_name: 'document-save-symbolic', style_class: 'timer-icon',
-        });
-        let saveButton = new St.Button({child: saveIcon});
-        let cancelIcon = new St.Icon({
-            y_align: Clutter.ActorAlign.CENTER, icon_name: 'process-stop-symbolic', style_class: 'timer-icon',
-        });
-        let cancelButton = new St.Button({child: cancelIcon});
+        let saveButton = new St.Button({child: new St.Icon({icon_name: 'document-save-symbolic'}), style_class: 'timer-icon-button button'});
+        let cancelButton = new St.Button({child: new St.Icon({icon_name: 'process-stop-symbolic'}), style_class: 'timer-icon-button button'});
 
-        // Add the Save and Cancel buttons to the timer item
-        item.add_child(saveButton);
-        item.add_child(cancelButton);
-        // Decrease padding to fit input text fields without changing the container height
-        item.add_style_class_name('timer-edit');
-        // Make buttons not-paused
-        item.remove_style_class_name('timer-paused');
+        // Add the Save and Cancel buttons to the actions row
+        actionsRow.add_child(saveButton);
+        actionsRow.add_child(cancelButton);
+        // Make actions row visible and animated
+        actionsRow.visible = true;
+        actionsRow.opacity = 255;
+
+        // Apply edit styling
+        mainRow.add_style_class_name('timer-edit');
 
         // Helper function to save the timer name and value
         const saveTimer = () => {
@@ -864,13 +882,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.timeElapsed = newTimeElapsed;
             }
 
-            // Handle workspace selection from button
-            if (currentWorkspaceSelection === -1) {
-                timer.workspaceId = null;
-            } else {
-                timer.workspaceId = currentWorkspaceSelection;
-            }
-
             // Replace the entries with the updated labels
             nameEntryParent.replace_child(nameEntry, nameLabel);
             nameLabel.text = timer.name;
@@ -878,58 +889,27 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             timeEntryParent.replace_child(timeEntry, timeLabel);
             timeLabel.text = this._formatTime(timer.timeElapsed);
 
-            // Update workspace indicator
-            let labelContainer = timeLabel.get_parent();
-            if (timer.workspaceId !== null && timer.workspaceId !== undefined) {
-                if (!uiElements.workspaceIndicator) {
-                    // Create new indicator
-                    uiElements.workspaceIndicator = new St.Label({
-                        text: `${timer.workspaceId}`, style_class: 'workspace-indicator',
-                    });
-                    labelContainer.add_child(uiElements.workspaceIndicator);
-                } else {
-                    // Update existing indicator
-                    uiElements.workspaceIndicator.text = `${timer.workspaceId}`;
-                    // Make sure it's in the container if it was removed
-                    if (!labelContainer.contains(uiElements.workspaceIndicator)) {
-                        labelContainer.add_child(uiElements.workspaceIndicator);
-                    }
-                }
-            } else {
-                // Remove indicator if workspace was unset
-                if (uiElements.workspaceIndicator && uiElements.workspaceIndicator.get_parent()) {
-                    uiElements.workspaceIndicator.get_parent().remove_child(uiElements.workspaceIndicator);
-                    uiElements.workspaceIndicator = null;
-                }
+            // Remove Save and Cancel buttons
+            if (saveButton && saveButton.get_parent() === actionsRow) {
+                actionsRow.remove_child(saveButton);
+            }
+            if (cancelButton && cancelButton.get_parent() === actionsRow) {
+                actionsRow.remove_child(cancelButton);
             }
 
-            // Remove workspace button, Save and Cancel buttons
-            if (workspaceButton && workspaceButton.get_parent() === item) {
-                item.remove_child(workspaceButton);
-            }
-            if (saveButton && saveButton.get_parent() === item) {
-                item.remove_child(saveButton);
-            }
-            if (cancelButton && cancelButton.get_parent() === item) {
-                item.remove_child(cancelButton);
-            }
-
-            // Restore padding to normal state
-            item.remove_style_class_name('timer-edit');
-            // Restore buttons color
-            item.add_style_class_name('timer-paused');
+            // Remove edit styling
+            mainRow.remove_style_class_name('timer-edit');
 
             // Show the previously hidden elements
             eyeButton.show();
-            playPauseButton.show();
-            resetButton.show();
+            expandButton.show();
+            clearButton.show();
             editButton.show();
             deleteButton.show();
 
             // Reset the editing state
             timer.isEditing = false;
             timer.editEntries = null;
-            timer.workspaceButton = null;
             timer.saveButton = null;
             timer.cancelButton = null;
 
@@ -938,10 +918,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Helper function to cancel editing
         const cancelEdit = () => {
-            // Remove the workspace button
-            if (workspaceButton && workspaceButton.get_parent() === item) {
-                item.remove_child(workspaceButton);
-            }
             this._resetEditingState(timer);
         };
 
@@ -994,7 +970,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Store the edit mode state and entry fields
         timer.isEditing = true;
         timer.editEntries = {nameEntry, timeEntry};
-        timer.workspaceButton = workspaceButton;
         timer.saveButton = saveButton;
         timer.cancelButton = cancelButton;
     }
@@ -1053,9 +1028,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             let uiElements = this._timerUIElements.get(timer.id);
             if (uiElements) {
                 if (uiElements.playPauseIcon) {
-                    uiElements.playPauseIcon.icon_name = timer.autoResume
-                        ? 'view-refresh-symbolic'
-                        : 'media-playback-start-symbolic';
+                    uiElements.playPauseIcon.icon_name = timer.autoResume ? 'view-refresh-symbolic' : 'media-playback-start-symbolic';
                 }
 
                 if (uiElements.timeLabel) {
@@ -1252,6 +1225,29 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._syncWorkspaces();
     }
 
+    _onTimersSettingsChanged() {
+        // Load new timer data from settings
+        let timersData = this._settings.get_strv('timers');
+
+        // Update workspace IDs for all timers
+        timersData.forEach(data => {
+            let item = JSON.parse(data);
+            if (item.id !== 'settings') {
+                const timer = this._timers.find(t => t.id === item.id);
+                if (timer) {
+                    // Normalize workspace ID: treat undefined as null
+                    const newWorkspaceId = item.workspaceId === undefined ? null : item.workspaceId;
+                    if (timer.workspaceId !== newWorkspaceId) {
+                        timer.workspaceId = newWorkspaceId;
+                    }
+                }
+            }
+        });
+
+        // Sync workspaces to apply the changes
+        this._syncWorkspaces();
+    }
+
     _syncWorkspaces() {
         let currentWorkspace = global.workspace_manager.get_active_workspace();
         if (!currentWorkspace) {
@@ -1263,10 +1259,15 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._timers.forEach(timer => {
             let uiElements = this._timerUIElements.get(timer.id);
-            if (!uiElements) return;
+            if (!uiElements) {
+                return;
+            }
+
+            // Check if timer has a workspace assignment (not null and not undefined)
+            const hasWorkspaceAssignment = typeof timer.workspaceId === 'number';
 
             // Pause timers that don't belong to this workspace
-            if (timer.workspaceId !== null && timer.workspaceId !== workspaceId) {
+            if (hasWorkspaceAssignment && timer.workspaceId !== workspaceId) {
                 if (timer.running) {
                     timer.autoResume = true;
 
@@ -1284,7 +1285,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 }
             }
             // Resume auto-paused timers that belong to this workspace
-            else if (timer.workspaceId === workspaceId && timer.autoResume) {
+            else if (hasWorkspaceAssignment && timer.workspaceId === workspaceId && timer.autoResume) {
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
 
@@ -1326,6 +1327,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (this._workspaceSignal) {
             global.workspace_manager.disconnect(this._workspaceSignal);
             this._workspaceSignal = null;
+        }
+
+        // Disconnect settings change handler
+        if (this._timerSettingsChangedHandler) {
+            this._settings.disconnect(this._timerSettingsChangedHandler);
+            this._timerSettingsChangedHandler = null;
         }
 
         // Clean up settings

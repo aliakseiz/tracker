@@ -1,43 +1,58 @@
-/* Main container of timer item */
-.timer-item {
+/* Timer item container (vertical box for main row + actions row) */
+.timer-item-container {
     min-width: 10em;
     max-width: 30em;
-    padding: 0.3em 0.7em 0.3em 0.7em;
-    spacing: 1.2em;
 }
 
-.timer-label-container { /* Clickable timer name and time */
-    padding: 0.3em 0.7em 0.3em 0.7em;
+/* Main row styling */
+.timer-item-row {
+    padding: 0.6em 0.5em 0.6em 0.7em;
 }
 
-.timer-label-container:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 0.5em;
+/* Timer selector */
+.timer-selector {
+    margin-right: 0.5em;
 }
 
+/* Timer name */
 .timer-text {
     min-width: 3em;
     max-width: 20em;
     text-align: left;
-    margin-right: 1em;
+    margin-right: 0.5em;
 }
 
+/* Timer time display */
 .timer-time {
     width: 4.5em;
-    text-align: left;
+    text-align: right;
+    margin-right: 0.5em;
 }
 
+/* Icons styling */
 .timer-icon {
     width: 1em;
     height: 1em;
 }
 
-.timer-icon:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 0.5em;
+.timer-icon-button {
+    border-radius: 2em;
+    min-height: 1em;
+    min-width: 1em;
+    padding: 0.5em;
 }
 
-/* Paused state */
+.timer-icon-button > StIcon {
+    icon-size: 0.8em;
+}
+
+/* Actions row (buttons) - second row in expanded state */
+.timer-actions-row {
+    padding: 0.3em 0 0 0;
+    spacing: 0.8em;
+}
+
+/* Paused state - dims text and icons */
 .timer-paused .timer-text,
 .timer-paused .timer-time,
 .timer-paused .timer-icon {
@@ -57,7 +72,7 @@
 }
 
 .timer-edit {
-    padding: 0 0.7em 0 0;
+    padding: 0.4em 0.7em 0.4em 0.7em;
 }
 
 /* Total time row */
@@ -79,17 +94,7 @@
 
 /* Right container (action buttons) */
 .right-container {
-    spacing: 1.2em;
+    spacing: 0.8em;
     /* Align items to the end (right side) */
     justify-content: flex-end;
-}
-
-.workspace-indicator {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    padding: 2px 8px;
-    margin-left: 8px;
-    margin-right: 8px;
-    font-size: 0.9em;
-    font-weight: bold;
 }
