@@ -502,7 +502,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // First row, main timer info
         let timerMainRow = new PopupMenu.PopupBaseMenuItem({
-            style_class: 'timer-item-row', activate: false, reactive: true, can_focus: true,
+            activate: false, reactive: true, can_focus: true,
         });
 
         // Checkbox icon
@@ -535,19 +535,19 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Timer name
         let nameLabel = new St.Label({
-            text: timer.name, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-text', reactive: false,
+            text: timer.name, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-text', reactive: true,
         });
 
         // Timer time
         let timeLabel = new St.Label({
-            text: this._formatTime(timer.timeElapsed), y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-time', reactive: false,
+            text: this._formatTime(timer.timeElapsed), y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-time', reactive: true,
         });
 
         // Expand/Collapse button
         let expandIcon = new St.Icon({
-            icon_name: timer.expanded ? 'pan-down-symbolic' : 'pan-end-symbolic',
+            icon_name: timer.expanded ? 'pan-down-symbolic' : 'pan-end-symbolic', style_class: 'timer-icon',
         });
-        let expandButton = new St.Button({child: expandIcon, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-icon'});
+        let expandButton = new St.Button({child: expandIcon, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-icon-expand'});
 
         // Function to toggle timer expansion
         const toggleExpanded = () => {
@@ -579,12 +579,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Vertical container for both rows (main + actions)
         let timerVerticalContainer = new St.BoxLayout({
-            vertical: true, style_class: 'timer-vertical-container', x_expand: true,
+            vertical: true, x_expand: true,
         });
 
         // Main row
         let timerMainContent = new St.BoxLayout({
-            vertical: false, style_class: 'timer-main-content', x_expand: true, reactive: true, can_focus: true,
+            vertical: false, x_expand: true, reactive: true, can_focus: true,
         });
 
         // Add directly to main row
@@ -592,7 +592,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Expandable container
         let expandableContainer = new St.BoxLayout({
-            vertical: false, style_class: 'timer-expandable-container', x_expand: true, reactive: true, can_focus: true,
+            vertical: false, x_expand: true,
         });
 
         // Add remaining elements to expandable
@@ -606,8 +606,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Second row, action buttons
         let timerActionsRow = new St.BoxLayout({
-            vertical: false, style_class: 'timer-actions-row', x_align: Clutter.ActorAlign.END,  // Right-align
-            visible: timer.expanded, opacity: timer.expanded ? 255 : 0, x_expand: true,
+            vertical: false,
+            style_class: 'timer-actions-row',
+            x_align: Clutter.ActorAlign.CENTER,
+            visible: timer.expanded,
+            opacity: timer.expanded ? 255 : 0,
+            x_expand: true,
         });
 
         // Add actions to main row
@@ -699,20 +703,14 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             timerMainRow.actor.remove_style_pseudo_class('highlighted');
         });
 
-        // Connect expand/collapse to clicking on the expandable container
-        expandableContainer.connect('button-press-event', (actor, event) => {
-            toggleExpanded();
-            return Clutter.EVENT_STOP;
-        });
-
-        // Also connect to nameLabel and timeLabel for clicks
+        // Connect to toggle timer state (play/pause) on click
         nameLabel.connect('button-press-event', (actor, event) => {
-            toggleExpanded();
+            toggleTimerState();
             return Clutter.EVENT_STOP;
         });
 
         timeLabel.connect('button-press-event', (actor, event) => {
-            toggleExpanded();
+            toggleTimerState();
             return Clutter.EVENT_STOP;
         });
 

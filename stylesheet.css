@@ -4,14 +4,11 @@
     max-width: 30em;
 }
 
-/* Main row styling */
-.timer-item-row {
-    padding: 0.6em 0.5em 0.6em 0.7em;
-}
 
+/* Main row styling */
 /* Timer selector */
 .timer-selector {
-    margin-right: 0.5em;
+    margin: 0 0.5em 0 0;
 }
 
 /* Timer name */
@@ -19,20 +16,30 @@
     min-width: 3em;
     max-width: 20em;
     text-align: left;
-    margin-right: 0.5em;
+    margin: 0 0.5em 0 0;
 }
 
 /* Timer time display */
 .timer-time {
     width: 4.5em;
     text-align: right;
-    margin-right: 0.5em;
+    margin: 0 0.5em 0 0;
 }
 
 /* Icons styling */
 .timer-icon {
     width: 1em;
     height: 1em;
+}
+
+.timer-icon-expand {
+    padding: 0.2em;
+    margin-left: 1em;
+}
+
+.timer-icon-expand:hover {
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 2em;
 }
 
 .timer-icon-button {
@@ -45,6 +52,7 @@
 .timer-icon-button > StIcon {
     icon-size: 0.8em;
 }
+
 
 /* Actions row (buttons) - second row in expanded state */
 .timer-actions-row {
@@ -63,8 +71,8 @@
 .name-entry, .timer-entry {
     padding-top: 0;
     padding-bottom: 0;
-    height: 1.85em;
     padding-right: 0;
+    height: 1.85em;
 }
 
 .name-entry {
