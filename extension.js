@@ -61,7 +61,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._settings = this.extension.getSettings();
 
         this._timerUIElements = new Map();
-
+        this._isInternalChange = false;
         this._totalTimeSelected = true; // Default to total time selected
         this._loadTimers();
 
@@ -359,6 +359,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _saveTimers() {
+        this._isInternalChange = true;
+
         let timersData = this._timers.map(timer => {
             let timerCopy = {...timer};
             delete timerCopy.lastUpdateTime;
@@ -372,6 +374,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         timersData.push(JSON.stringify(settingsData));
 
         this._settings.set_strv('timers', timersData);
+        this._isInternalChange = false;
     }
 
     _buildMenu() {
@@ -538,6 +541,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             text: timer.name, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-text', reactive: true,
         });
 
+        // Workspace badge
+        let workspaceBadge = this._createWorkspaceBadge(timer.workspaceId);
+
         // Timer time
         let timeLabel = new St.Label({
             text: this._formatTime(timer.timeElapsed), y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-time', reactive: true,
@@ -597,6 +603,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Add remaining elements to expandable
         expandableContainer.add_child(nameLabel);
+        if (workspaceBadge) {
+            expandableContainer.add_child(workspaceBadge);
+        }
         expandableContainer.add_child(timeLabel);
         expandableContainer.add_child(expandButton);
 
@@ -728,6 +737,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             actionsRow: timerActionsRow,
             nameLabel: nameLabel,
             timeLabel: timeLabel,
+            workspaceBadge: workspaceBadge,
             eyeButton: eyeButton,
             expandButton: expandButton,
             expandIcon: expandIcon,
@@ -1147,6 +1157,20 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
 
+    _createWorkspaceBadge(workspaceId) {
+        if (typeof workspaceId !== 'number') {
+            return null;
+        }
+
+        return new St.Label({
+            text: `${workspaceId}`,
+            y_align: Clutter.ActorAlign.CENTER,
+            x_align: Clutter.ActorAlign.END,
+            style_class: 'timer-workspace-badge',
+            reactive: true,
+        });
+    }
+
     _formatTime(seconds) {
         let hrs = Math.floor(seconds / 3600).toString().padStart(2, '0');
         let mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -1224,6 +1248,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _onTimersSettingsChanged() {
+        if (this._isInternalChange) {
+            return;
+        }
         // Load new timer data from settings
         let timersData = this._settings.get_strv('timers');
 
@@ -1237,6 +1264,34 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                     const newWorkspaceId = item.workspaceId === undefined ? null : item.workspaceId;
                     if (timer.workspaceId !== newWorkspaceId) {
                         timer.workspaceId = newWorkspaceId;
+
+                        // Update workspace badge in UI
+                        let uiElements = this._timerUIElements.get(timer.id);
+                        if (uiElements) {
+                            let expandableContainer = uiElements.nameLabel.get_parent();
+                            if (expandableContainer) {
+                                // Remove old badge if it exists
+                                if (uiElements.workspaceBadge && uiElements.workspaceBadge.get_parent() === expandableContainer) {
+                                    expandableContainer.remove_child(uiElements.workspaceBadge);
+                                }
+
+                                // Create new badge if workspace is assigned
+                                if (typeof newWorkspaceId === 'number') {
+                                    let newBadge = this._createWorkspaceBadge(newWorkspaceId);
+                                    // Insert badge between nameLabel and timeLabel
+                                    let timeLabel = uiElements.timeLabel;
+                                    let timeIndex = expandableContainer.get_children().indexOf(timeLabel);
+                                    if (timeIndex >= 0) {
+                                        expandableContainer.insert_child_at_index(newBadge, timeIndex);
+                                    } else {
+                                        expandableContainer.add_child(newBadge);
+                                    }
+                                    uiElements.workspaceBadge = newBadge;
+                                } else {
+                                    uiElements.workspaceBadge = null;
+                                }
+                            }
+                        }
                     }
                 }
             }

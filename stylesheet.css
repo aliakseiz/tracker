@@ -19,6 +19,19 @@
     margin: 0 0.5em 0 0;
 }
 
+/* Workspace badge - circular indicator */
+.timer-workspace-badge {
+    width: 1em;
+    height: 1em;
+    padding: 0.25em;
+    border-radius: 2em;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    text-align: center;
+    vertical-align: middle;
+    font-size: 0.7em;
+    margin: 0 0.5em 0 0;
+}
+
 /* Timer time display */
 .timer-time {
     width: 4.5em;
@@ -63,7 +76,8 @@
 /* Paused state - dims text and icons */
 .timer-paused .timer-text,
 .timer-paused .timer-time,
-.timer-paused .timer-icon {
+.timer-paused .timer-icon,
+.timer-paused .timer-workspace-badge {
     color: grey;
 }
 
