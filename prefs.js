@@ -236,6 +236,45 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
             });
 
             expanderRow.add_row(comboBox);
+
+            // Entry for window regex
+            const regexEntry = new Adw.EntryRow({
+                title: 'Window Regex',
+                text: timer.windowRegex || '',
+            });
+            regexEntry.set_input_purpose(Gtk.InputPurpose.FREE_FORM);
+            
+            // Add placeholder with examples
+            const placeholderText = 'e.g., /Calculator/ or /^(?!.*Huddle).*Slack/';
+            regexEntry.connect('map', () => {
+                const textWidget = regexEntry.get_delegate();
+                if (textWidget) {
+                    textWidget.set_placeholder_text(placeholderText);
+                }
+            });
+
+            // Connect change event
+            regexEntry.connect('changed', (entry) => {
+                const newRegex = entry.text.trim();
+                
+                // Update timer in settings
+                const timersData = settings.get_strv('timers');
+                const newTimersData = timersData.map(data => {
+                    try {
+                        const item = JSON.parse(data);
+                        if (item.id === timer.id) {
+                            item.windowRegex = newRegex || null;
+                        }
+                        return JSON.stringify(item);
+                    } catch (e) {
+                        return data;
+                    }
+                });
+
+                settings.set_strv('timers', newTimersData);
+            });
+
+            expanderRow.add_row(regexEntry);
             group.add(expanderRow);
         });
     }

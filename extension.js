@@ -84,6 +84,11 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             this._onWorkspaceChanged(wm, from, to);
         });
 
+        // Connect to window focus change signal
+        this._windowFocusSignal = global.display.connect('notify::focus-window', () => {
+            this._onWindowFocusChanged();
+        });
+
         // Listen for settings changes from prefs dialog
         this._timerSettingsChangedHandler = this._settings.connect('changed::timers', () => {
             this._onTimersSettingsChanged();
@@ -1183,7 +1188,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _onScreenUnlocked() {
-        this._syncWorkspaces();
+        this._syncTimers();
     }
 
     _downloadCsv() {
@@ -1244,7 +1249,129 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _onWorkspaceChanged(wm, from, to) {
-        this._syncWorkspaces();
+        this._syncTimers();
+    }
+
+    _onWindowFocusChanged() {
+        this._syncTimers();
+    }
+
+    _parseRegexPattern(regexString) {
+        if (!regexString || typeof regexString !== 'string') {
+            return null;
+        }
+
+        // Remove leading/trailing whitespace
+        regexString = regexString.trim();
+
+        if (!regexString) {
+            return null;
+        }
+
+        // Check if regex is enclosed in slashes
+        const slashRegex = /^\/(.*)\/([gimuy]*)$/;
+        const match = regexString.match(slashRegex);
+
+        let pattern, flags;
+        if (match) {
+            pattern = match[1];
+            flags = match[2] || '';
+        } else {
+            // Use the string as-is if not enclosed in slashes
+            pattern = regexString;
+            flags = '';
+        }
+
+        try {
+            return new RegExp(pattern, flags);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    _getCurrentWindowTitle() {
+        const focusWindow = global.display.focus_window;
+        if (!focusWindow) {
+            return null;
+        }
+
+        // Try to get window title first
+        let title = focusWindow.get_title();
+
+        // Fallback to WM class if title is not available
+        if (!title) {
+            title = focusWindow.get_wm_class();
+        }
+
+        return title;
+    }
+
+    _syncWindowFocus() {
+        const windowTitle = this._getCurrentWindowTitle();
+        const currentTime = GLib.get_real_time();
+
+        this._timers.forEach(timer => {
+            // Skip timers without regex patterns
+            if (!timer.windowRegex || typeof timer.windowRegex !== 'string' || !timer.windowRegex.trim()) {
+                return;
+            }
+
+            let uiElements = this._timerUIElements.get(timer.id);
+            if (!uiElements) {
+                return;
+            }
+
+            const regex = this._parseRegexPattern(timer.windowRegex);
+            if (!regex) {
+                return;
+            }
+
+            // Test if window title matches the regex
+            const matches = windowTitle ? regex.test(windowTitle) : false;
+
+            // Determine if timer should run based on workspace AND window regex
+            const hasWorkspaceAssignment = typeof timer.workspaceId === 'number';
+            let shouldRun = matches;
+
+            // If workspace is also assigned, both conditions must be met
+            if (hasWorkspaceAssignment) {
+                const currentWorkspace = global.workspace_manager.get_active_workspace();
+                const workspaceId = currentWorkspace ? currentWorkspace.index() : 0;
+                const workspaceMatches = timer.workspaceId === workspaceId;
+                shouldRun = matches && workspaceMatches;
+            }
+
+            // Auto-pause timer if it's running but shouldn't be
+            if (timer.running && !shouldRun) {
+                timer.autoResume = true;
+
+                let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
+                timer.timeElapsed += elapsed;
+                timer.running = false;
+                timer.lastUpdateTime = null;
+
+                if (uiElements.playPauseIcon) {
+                    uiElements.playPauseIcon.icon_name = 'view-refresh-symbolic';
+                }
+                if (uiElements.item) {
+                    uiElements.item.add_style_class_name('timer-paused');
+                }
+            }
+            // Auto-start/resume timer if conditions match
+            else if (!timer.running && shouldRun && (timer.autoResume || timer.windowRegex)) {
+                timer.running = true;
+                timer.lastUpdateTime = currentTime;
+
+                if (uiElements.playPauseIcon) {
+                    uiElements.playPauseIcon.icon_name = 'media-playback-pause-symbolic';
+                }
+                if (uiElements.item) {
+                    uiElements.item.remove_style_class_name('timer-paused');
+                }
+            }
+        });
+
+        this._saveTimers();
     }
 
     _onTimersSettingsChanged() {
@@ -1254,7 +1381,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Load new timer data from settings
         let timersData = this._settings.get_strv('timers');
 
-        // Update workspace IDs for all timers
+        // Update workspace IDs and window regex for all timers
         timersData.forEach(data => {
             let item = JSON.parse(data);
             if (item.id !== 'settings') {
@@ -1262,6 +1389,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 if (timer) {
                     // Normalize workspace ID: treat undefined as null
                     const newWorkspaceId = item.workspaceId === undefined ? null : item.workspaceId;
+                    const newWindowRegex = item.windowRegex === undefined ? null : item.windowRegex;
+
+                    // Update workspace ID if changed
                     if (timer.workspaceId !== newWorkspaceId) {
                         timer.workspaceId = newWorkspaceId;
 
@@ -1293,12 +1423,23 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                             }
                         }
                     }
+
+                    // Update window regex if changed
+                    if (timer.windowRegex !== newWindowRegex) {
+                        timer.windowRegex = newWindowRegex;
+                    }
                 }
             }
         });
 
-        // Sync workspaces to apply the changes
+        // Sync timers to apply the changes
+        this._syncTimers();
+    }
+
+    _syncTimers() {
+        // Unified method: sync both workspace and window focus changes
         this._syncWorkspaces();
+        this._syncWindowFocus();
     }
 
     _syncWorkspaces() {
@@ -1338,7 +1479,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 }
             }
             // Resume auto-paused timers that belong to this workspace
-            else if (hasWorkspaceAssignment && timer.workspaceId === workspaceId && timer.autoResume) {
+            // Skip timers with regex
+            else if (hasWorkspaceAssignment && timer.workspaceId === workspaceId && timer.autoResume && !timer.windowRegex) {
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
 
@@ -1380,6 +1522,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (this._workspaceSignal) {
             global.workspace_manager.disconnect(this._workspaceSignal);
             this._workspaceSignal = null;
+        }
+
+        // Window focus signals
+        if (this._windowFocusSignal) {
+            global.display.disconnect(this._windowFocusSignal);
+            this._windowFocusSignal = null;
         }
 
         // Disconnect settings change handler
