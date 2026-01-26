@@ -125,7 +125,8 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         });
 
         const group = new Adw.PreferencesGroup({
-            title: 'Timer Workspace Association', description: 'Associate timers with specific workspaces'
+            title: 'Automatic Timer Control',
+            description: 'Optionally link timers to a workspace and/or a window title regex. Linked timers start when matched and pause when you switch away or focus a different window.',
         });
         page.add(group);
 
@@ -187,8 +188,7 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         timers.forEach((timer, index) => {
             // Create expander row
             const expanderRow = new Adw.ExpanderRow({
-                title: timer.name || '<empty>',
-                subtitle: timer.workspaceId !== null && timer.workspaceId !== undefined ? `Workspace ${timer.workspaceId}` : 'No workspace',
+                title: timer.name || '<empty>', subtitle: this._createTimerSubtitle(timer),
             });
 
             // Dropdown for workspace selection
@@ -222,6 +222,10 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
                         const item = JSON.parse(data);
                         if (item.id === timer.id) {
                             item.workspaceId = newWorkspaceId;
+                            // Ensure windowRegex is explicitly preserved (don't let JSON.stringify omit undefined)
+                            if (item.windowRegex === undefined) {
+                                item.windowRegex = null;
+                            }
                         }
                         return JSON.stringify(item);
                     } catch (e) {
@@ -231,19 +235,19 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
 
                 settings.set_strv('timers', newTimersData);
 
-                // Update the subtitle
-                expanderRow.set_subtitle(newWorkspaceId !== null ? `Workspace ${newWorkspaceId}` : 'No workspace');
+                // Update the subtitle with both workspace and regex status
+                timer.workspaceId = newWorkspaceId;
+                expanderRow.set_subtitle(this._createTimerSubtitle(timer));
             });
 
             expanderRow.add_row(comboBox);
 
             // Entry for window regex
             const regexEntry = new Adw.EntryRow({
-                title: 'Window Regex',
-                text: timer.windowRegex || '',
+                title: 'Window Regex', text: timer.windowRegex || '',
             });
             regexEntry.set_input_purpose(Gtk.InputPurpose.FREE_FORM);
-            
+
             // Add placeholder with examples
             const placeholderText = 'e.g., /Calculator/ or /^(?!.*Huddle).*Slack/';
             regexEntry.connect('map', () => {
@@ -256,7 +260,7 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
             // Connect change event
             regexEntry.connect('changed', (entry) => {
                 const newRegex = entry.text.trim();
-                
+
                 // Update timer in settings
                 const timersData = settings.get_strv('timers');
                 const newTimersData = timersData.map(data => {
@@ -264,6 +268,10 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
                         const item = JSON.parse(data);
                         if (item.id === timer.id) {
                             item.windowRegex = newRegex || null;
+                            // Ensure workspaceId is explicitly preserved (don't let JSON.stringify omit undefined)
+                            if (item.workspaceId === undefined) {
+                                item.workspaceId = null;
+                            }
                         }
                         return JSON.stringify(item);
                     } catch (e) {
@@ -272,11 +280,31 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
                 });
 
                 settings.set_strv('timers', newTimersData);
+
+                // Update the subtitle
+                timer.windowRegex = newRegex || null;
+                expanderRow.set_subtitle(this._createTimerSubtitle(timer));
             });
 
             expanderRow.add_row(regexEntry);
             group.add(expanderRow);
         });
+    }
+
+    _createTimerSubtitle(timer) {
+        // Create subtitle showing workspace and regex status
+        const hasWorkspace = timer.workspaceId !== null && timer.workspaceId !== undefined;
+        const hasRegex = timer.windowRegex && typeof timer.windowRegex === 'string' && timer.windowRegex.trim().length > 0;
+
+        if (hasWorkspace && hasRegex) {
+            return `Workspace ${timer.workspaceId} and Regex`;
+        } else if (hasWorkspace) {
+            return `Workspace ${timer.workspaceId}`;
+        } else if (hasRegex) {
+            return 'Window Regex';
+        } else {
+            return '';
+        }
     }
 
     _updateTimersPage() {

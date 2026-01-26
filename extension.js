@@ -101,7 +101,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._startTimers();
 
-        this._syncWorkspaces();
+        this._syncTimers();
     }
 
     _initBackup() {
@@ -460,6 +460,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
         rightContainer.add_child(addButton);
 
+        // Settings button
+        let settingsButton = new St.Button({child: new St.Icon({icon_name: 'preferences-system-symbolic'}), style_class: 'timer-icon-button button'});
+        settingsButton.connect('clicked', () => {
+            this._openSettings();
+        });
+        rightContainer.add_child(settingsButton);
+
         // Assemble the buttons container
         summaryWrapper.add_child(leftContainer);
         summaryWrapper.add_child(rightContainer);
@@ -546,8 +553,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             text: timer.name, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'timer-text', reactive: true,
         });
 
-        // Workspace badge
+        // Badges
         let workspaceBadge = this._createWorkspaceBadge(timer.workspaceId);
+        let regexBadge = this._createWindowRegexBadge(timer.windowRegex);
 
         // Timer time
         let timeLabel = new St.Label({
@@ -606,15 +614,16 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             vertical: false, x_expand: true,
         });
 
-        // Add remaining elements to expandable
         expandableContainer.add_child(nameLabel);
         if (workspaceBadge) {
             expandableContainer.add_child(workspaceBadge);
         }
+        if (regexBadge) {
+            expandableContainer.add_child(regexBadge);
+        }
         expandableContainer.add_child(timeLabel);
         expandableContainer.add_child(expandButton);
 
-        // Add to main content
         timerMainContent.add_child(expandableContainer);
         timerVerticalContainer.add_child(timerMainContent);
 
@@ -649,7 +658,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         const toggleTimerState = () => {
             let currentTime = GLib.get_real_time();
             if (timer.running) {
-                // Pause timer
+                // Pause timer - manual pause, no auto-activation
                 let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
                 timer.timeElapsed += elapsed;
                 timer.running = false;
@@ -660,10 +669,14 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 playPauseIcon.icon_name = 'media-playback-start-symbolic';
                 timerMainRow.add_style_class_name('timer-paused');
             } else {
-                // Start timer
+                // Start timer - simple toggle, no condition checking
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
-                timer.autoResume = typeof timer.workspaceId === 'number';
+
+                // Set autoResume based on whether timer has conditions assigned
+                const hasWorkspace = typeof timer.workspaceId === 'number';
+                const hasRegex = timer.windowRegex && typeof timer.windowRegex === 'string' && timer.windowRegex.trim();
+                timer.autoResume = hasWorkspace || hasRegex;
 
                 // Update icon to "Pause"
                 playPauseIcon.icon_name = 'media-playback-pause-symbolic';
@@ -743,6 +756,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             nameLabel: nameLabel,
             timeLabel: timeLabel,
             workspaceBadge: workspaceBadge,
+            regexBadge: regexBadge,
+            expandableContainer: expandableContainer,
             eyeButton: eyeButton,
             expandButton: expandButton,
             expandIcon: expandIcon,
@@ -1027,13 +1042,13 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.running = false;
                 timer.lastUpdateTime = null;
 
-                const hasWorkspace = typeof timer.workspaceId === 'number';
-                if (pauseType !== PauseType.MANUAL && hasWorkspace) {
-                    timer.autoResume = true;
+                // For manual pause all, don't mark as auto-pause (no auto-activation)
+                if (pauseType === PauseType.MANUAL) {
+                    timer.autoResume = false;
                 }
-            }
-
-            if (pauseType === PauseType.MANUAL) {
+                // For other pause types, keep existing autoResume state
+            } else if (pauseType === PauseType.MANUAL && timer.autoResume) {
+                // Clear auto-pause flag for already paused timers
                 timer.autoResume = false;
             }
 
@@ -1131,6 +1146,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             });
             this._updateTotalTime();
             this._updatePanelLabel();
+
             return GLib.SOURCE_CONTINUE;
         });
     }
@@ -1176,6 +1192,16 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
     }
 
+    _createWindowRegexBadge(windowRegex) {
+        if (!windowRegex || typeof windowRegex !== 'string' || !windowRegex.trim()) {
+            return null;
+        }
+
+        return new St.Icon({
+            icon_name: 'window-new-symbolic', style_class: 'timer-regex-badge', y_align: Clutter.ActorAlign.CENTER,
+        });
+    }
+
     _formatTime(seconds) {
         let hrs = Math.floor(seconds / 3600).toString().padStart(2, '0');
         let mins = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -1184,7 +1210,31 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _onScreenLocked() {
-        this._pauseAllTimers(PauseType.AUTO);
+        let currentTime = GLib.get_real_time();
+        this._timers.forEach(timer => {
+            if (timer.running) {
+                let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
+                timer.timeElapsed += elapsed;
+                timer.running = false;
+                timer.lastUpdateTime = null;
+                timer.autoResume = true; // Mark ALL running timers as auto-paused
+
+                // Update UI
+                let uiElements = this._timerUIElements.get(timer.id);
+                if (uiElements) {
+                    if (uiElements.playPauseIcon) {
+                        uiElements.playPauseIcon.icon_name = 'view-refresh-symbolic';
+                    }
+                    if (uiElements.timeLabel) {
+                        uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
+                    }
+                    if (uiElements.item) {
+                        uiElements.item.add_style_class_name('timer-paused');
+                    }
+                }
+            }
+        });
+        this._saveTimers();
     }
 
     _onScreenUnlocked() {
@@ -1306,42 +1356,138 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         return title;
     }
 
-    _syncWindowFocus() {
-        const windowTitle = this._getCurrentWindowTitle();
-        const currentTime = GLib.get_real_time();
+    _shouldTimerRun(timer) {
+        const hasWorkspace = typeof timer.workspaceId === 'number';
+        const hasRegex = timer.windowRegex && typeof timer.windowRegex === 'string' && timer.windowRegex.trim();
+
+        // No conditions assigned - timer is manual only
+        if (!hasWorkspace && !hasRegex) {
+            return null; // null means "don't auto-control"
+        }
+
+        let workspaceMatches = true;
+        let regexMatches = true;
+
+        // Check workspace condition
+        if (hasWorkspace) {
+            const currentWorkspace = global.workspace_manager.get_active_workspace();
+            const workspaceId = currentWorkspace ? currentWorkspace.index() : 0;
+            workspaceMatches = timer.workspaceId === workspaceId;
+        }
+
+        // Check regex condition
+        if (hasRegex) {
+            const regex = this._parseRegexPattern(timer.windowRegex);
+            if (regex) {
+                const windowTitle = this._getCurrentWindowTitle();
+                regexMatches = windowTitle ? regex.test(windowTitle) : false;
+            } else {
+                regexMatches = false;
+            }
+        }
+
+        // Both conditions must match if both are assigned
+        return workspaceMatches && regexMatches;
+    }
+
+    _updateTimerBadges(timerId) {
+        const timer = this._timers.find(t => t.id === timerId);
+        if (!timer) {
+            return;
+        }
+
+        const uiElements = this._timerUIElements.get(timerId);
+        if (!uiElements?.expandableContainer) {
+            return;
+        }
+
+        const expandableContainer = uiElements.expandableContainer;
+
+        // Remove old badges
+        if (uiElements.workspaceBadge?.get_parent() === expandableContainer) {
+            expandableContainer.remove_child(uiElements.workspaceBadge);
+        }
+        if (uiElements.regexBadge?.get_parent() === expandableContainer) {
+            expandableContainer.remove_child(uiElements.regexBadge);
+        }
+
+        // Create new badges
+        const newWorkspaceBadge = this._createWorkspaceBadge(timer.workspaceId);
+        const newRegexBadge = this._createWindowRegexBadge(timer.windowRegex);
+
+        // Insert badges in correct order: nameLabel, workspaceBadge, regexBadge, timeLabel
+        const timeLabel = uiElements.timeLabel;
+        const timeIndex = expandableContainer.get_children().indexOf(timeLabel);
+
+        if (newRegexBadge && timeIndex >= 0) {
+            expandableContainer.insert_child_at_index(newRegexBadge, timeIndex);
+        }
+        if (newWorkspaceBadge && timeIndex >= 0) {
+            expandableContainer.insert_child_at_index(newWorkspaceBadge, timeIndex);
+        }
+
+        // Update references
+        uiElements.workspaceBadge = newWorkspaceBadge;
+        uiElements.regexBadge = newRegexBadge;
+    }
+
+    _onTimersSettingsChanged() {
+        if (this._isInternalChange) {
+            return;
+        }
+
+        let timersData = this._settings.get_strv('timers');
+
+        timersData.forEach(data => {
+            let item = JSON.parse(data);
+            if (item.id !== 'settings') {
+                const timer = this._timers.find(t => t.id === item.id);
+                if (timer) {
+                    // Normalize workspace ID: treat undefined as null
+                    const newWorkspaceId = item.workspaceId === undefined ? null : item.workspaceId;
+                    const newWindowRegex = item.windowRegex === undefined ? null : item.windowRegex;
+
+                    // Check if workspace changed
+                    const workspaceChanged = timer.workspaceId !== newWorkspaceId;
+
+                    // Check if regex changed (normalize to null for consistent comparison)
+                    const currentRegex = timer.windowRegex ? timer.windowRegex.trim() : null;
+                    const updatedRegex = newWindowRegex ? newWindowRegex.trim() : null;
+                    const regexChanged = currentRegex !== updatedRegex;
+
+                    if (workspaceChanged || regexChanged) {
+                        // Update timer data
+                        timer.workspaceId = newWorkspaceId;
+                        timer.windowRegex = newWindowRegex;
+
+                        // Update badges for this timer only
+                        this._updateTimerBadges(timer.id);
+                    }
+                }
+            }
+        });
+
+        // Sync timers to apply the changes
+        this._syncTimers();
+    }
+
+    _syncTimers() {
+        let currentTime = GLib.get_real_time();
 
         this._timers.forEach(timer => {
-            // Skip timers without regex patterns
-            if (!timer.windowRegex || typeof timer.windowRegex !== 'string' || !timer.windowRegex.trim()) {
-                return;
-            }
-
             let uiElements = this._timerUIElements.get(timer.id);
             if (!uiElements) {
                 return;
             }
 
-            const regex = this._parseRegexPattern(timer.windowRegex);
-            if (!regex) {
+            const shouldRun = this._shouldTimerRun(timer);
+
+            // null - no conditions assigned, don't auto-control
+            if (shouldRun === null) {
                 return;
             }
 
-            // Test if window title matches the regex
-            const matches = windowTitle ? regex.test(windowTitle) : false;
-
-            // Determine if timer should run based on workspace AND window regex
-            const hasWorkspaceAssignment = typeof timer.workspaceId === 'number';
-            let shouldRun = matches;
-
-            // If workspace is also assigned, both conditions must be met
-            if (hasWorkspaceAssignment) {
-                const currentWorkspace = global.workspace_manager.get_active_workspace();
-                const workspaceId = currentWorkspace ? currentWorkspace.index() : 0;
-                const workspaceMatches = timer.workspaceId === workspaceId;
-                shouldRun = matches && workspaceMatches;
-            }
-
-            // Auto-pause timer if it's running but shouldn't be
+            // Auto-pause timer if it's running but conditions don't match
             if (timer.running && !shouldRun) {
                 timer.autoResume = true;
 
@@ -1357,8 +1503,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                     uiElements.item.add_style_class_name('timer-paused');
                 }
             }
-            // Auto-start/resume timer if conditions match
-            else if (!timer.running && shouldRun && (timer.autoResume || timer.windowRegex)) {
+            // Auto-resume timer if conditions match and it was auto-paused
+            else if (!timer.running && shouldRun && timer.autoResume) {
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
 
@@ -1374,126 +1520,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._saveTimers();
     }
 
-    _onTimersSettingsChanged() {
-        if (this._isInternalChange) {
-            return;
+    _openSettings() {
+        try {
+            this.extension.openPreferences();
+        } catch (err) {
+            console.log(`Error: Failed to open settings: ${err.message}`);
         }
-        // Load new timer data from settings
-        let timersData = this._settings.get_strv('timers');
-
-        // Update workspace IDs and window regex for all timers
-        timersData.forEach(data => {
-            let item = JSON.parse(data);
-            if (item.id !== 'settings') {
-                const timer = this._timers.find(t => t.id === item.id);
-                if (timer) {
-                    // Normalize workspace ID: treat undefined as null
-                    const newWorkspaceId = item.workspaceId === undefined ? null : item.workspaceId;
-                    const newWindowRegex = item.windowRegex === undefined ? null : item.windowRegex;
-
-                    // Update workspace ID if changed
-                    if (timer.workspaceId !== newWorkspaceId) {
-                        timer.workspaceId = newWorkspaceId;
-
-                        // Update workspace badge in UI
-                        let uiElements = this._timerUIElements.get(timer.id);
-                        if (uiElements) {
-                            let expandableContainer = uiElements.nameLabel.get_parent();
-                            if (expandableContainer) {
-                                // Remove old badge if it exists
-                                if (uiElements.workspaceBadge && uiElements.workspaceBadge.get_parent() === expandableContainer) {
-                                    expandableContainer.remove_child(uiElements.workspaceBadge);
-                                }
-
-                                // Create new badge if workspace is assigned
-                                if (typeof newWorkspaceId === 'number') {
-                                    let newBadge = this._createWorkspaceBadge(newWorkspaceId);
-                                    // Insert badge between nameLabel and timeLabel
-                                    let timeLabel = uiElements.timeLabel;
-                                    let timeIndex = expandableContainer.get_children().indexOf(timeLabel);
-                                    if (timeIndex >= 0) {
-                                        expandableContainer.insert_child_at_index(newBadge, timeIndex);
-                                    } else {
-                                        expandableContainer.add_child(newBadge);
-                                    }
-                                    uiElements.workspaceBadge = newBadge;
-                                } else {
-                                    uiElements.workspaceBadge = null;
-                                }
-                            }
-                        }
-                    }
-
-                    // Update window regex if changed
-                    if (timer.windowRegex !== newWindowRegex) {
-                        timer.windowRegex = newWindowRegex;
-                    }
-                }
-            }
-        });
-
-        // Sync timers to apply the changes
-        this._syncTimers();
-    }
-
-    _syncTimers() {
-        // Unified method: sync both workspace and window focus changes
-        this._syncWorkspaces();
-        this._syncWindowFocus();
-    }
-
-    _syncWorkspaces() {
-        let currentWorkspace = global.workspace_manager.get_active_workspace();
-        if (!currentWorkspace) {
-            return;
-        }
-
-        let workspaceId = currentWorkspace.index();
-        let currentTime = GLib.get_real_time();
-
-        this._timers.forEach(timer => {
-            let uiElements = this._timerUIElements.get(timer.id);
-            if (!uiElements) {
-                return;
-            }
-
-            // Check if timer has a workspace assignment (not null and not undefined)
-            const hasWorkspaceAssignment = typeof timer.workspaceId === 'number';
-
-            // Pause timers that don't belong to this workspace
-            if (hasWorkspaceAssignment && timer.workspaceId !== workspaceId) {
-                if (timer.running) {
-                    timer.autoResume = true;
-
-                    let elapsed = (currentTime - timer.lastUpdateTime) / 1000000;
-                    timer.timeElapsed += elapsed;
-                    timer.running = false;
-                    timer.lastUpdateTime = null;
-
-                    if (uiElements.playPauseIcon) {
-                        uiElements.playPauseIcon.icon_name = 'view-refresh-symbolic';
-                    }
-                    if (uiElements.item) {
-                        uiElements.item.add_style_class_name('timer-paused');
-                    }
-                }
-            }
-            // Resume auto-paused timers that belong to this workspace
-            // Skip timers with regex
-            else if (hasWorkspaceAssignment && timer.workspaceId === workspaceId && timer.autoResume && !timer.windowRegex) {
-                timer.running = true;
-                timer.lastUpdateTime = currentTime;
-
-                if (uiElements.playPauseIcon) {
-                    uiElements.playPauseIcon.icon_name = 'media-playback-pause-symbolic';
-                }
-                if (uiElements.item) {
-                    uiElements.item.remove_style_class_name('timer-paused');
-                }
-            }
-        });
-
-        this._saveTimers();
     }
 
     destroy() {
@@ -1512,25 +1544,25 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this._stopBackupTimer();
 
-        // Disconnect screen lock signals
+        // Disconnect screen lock signal
         if (this._screenShieldSignal) {
             Main.screenShield.disconnect(this._screenShieldSignal);
             this._screenShieldSignal = null;
         }
 
-        // Workspace signals
+        // Workspace signal
         if (this._workspaceSignal) {
             global.workspace_manager.disconnect(this._workspaceSignal);
             this._workspaceSignal = null;
         }
 
-        // Window focus signals
+        // Window focus signal
         if (this._windowFocusSignal) {
             global.display.disconnect(this._windowFocusSignal);
             this._windowFocusSignal = null;
         }
 
-        // Disconnect settings change handler
+        // Settings change handler
         if (this._timerSettingsChangedHandler) {
             this._settings.disconnect(this._timerSettingsChangedHandler);
             this._timerSettingsChangedHandler = null;
