@@ -4,6 +4,9 @@ import Adw from 'gi://Adw';
 import GLib from 'gi://GLib';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
+const isNonEmptyString = v => typeof v === 'string' && v.trim().length > 0;
+const isWorkspaceId = v => Number.isInteger(v) && v >= 0;
+
 export default class TrackerExtensionPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
@@ -166,7 +169,7 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         // and providing a reasonable range (0-9 workspaces are common)
         let maxWorkspaceId = -1;
         timers.forEach(timer => {
-            if (typeof timer.workspaceId === 'number' && timer.workspaceId > maxWorkspaceId) {
+            if (isWorkspaceId(timer.workspaceId) && timer.workspaceId > maxWorkspaceId) {
                 maxWorkspaceId = timer.workspaceId;
             }
         });
@@ -294,7 +297,7 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
     _createTimerSubtitle(timer) {
         // Create subtitle showing workspace and regex status
         const hasWorkspace = timer.workspaceId !== null && timer.workspaceId !== undefined;
-        const hasRegex = timer.windowRegex && typeof timer.windowRegex === 'string' && timer.windowRegex.trim().length > 0;
+        const hasRegex = isNonEmptyString(timer.windowRegex);
 
         if (hasWorkspace && hasRegex) {
             return `Workspace ${timer.workspaceId} and Regex`;

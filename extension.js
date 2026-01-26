@@ -48,6 +48,9 @@ const PauseType = {
     SILENT: 'silent', // destroy (no effect on auto-resume)
 };
 
+const isNonEmptyString = v => typeof v === 'string' && v.trim().length > 0;
+const isWorkspaceId = v => Number.isInteger(v) && v >= 0;
+
 const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     _init(extension) {
         super._init(0.0, 'Timer Tracker');
@@ -674,8 +677,9 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.lastUpdateTime = currentTime;
 
                 // Set autoResume based on whether timer has conditions assigned
-                const hasWorkspace = typeof timer.workspaceId === 'number';
-                const hasRegex = timer.windowRegex && typeof timer.windowRegex === 'string' && timer.windowRegex.trim();
+                const hasWorkspace = isWorkspaceId(timer.workspaceId);
+                const hasRegex = isNonEmptyString(timer.windowRegex);
+
                 timer.autoResume = hasWorkspace || hasRegex;
 
                 // Update icon to "Pause"
@@ -1179,7 +1183,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
 
     _createWorkspaceBadge(workspaceId) {
-        if (typeof workspaceId !== 'number') {
+        if (!isWorkspaceId(workspaceId)) {
             return null;
         }
 
@@ -1193,7 +1197,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _createWindowRegexBadge(windowRegex) {
-        if (!windowRegex || typeof windowRegex !== 'string' || !windowRegex.trim()) {
+        if (!isNonEmptyString(windowRegex)) {
             return null;
         }
 
@@ -1307,7 +1311,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _parseRegexPattern(regexString) {
-        if (!regexString || typeof regexString !== 'string') {
+        if (!isNonEmptyString(regexString)) {
             return null;
         }
 
@@ -1357,8 +1361,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _shouldTimerRun(timer) {
-        const hasWorkspace = typeof timer.workspaceId === 'number';
-        const hasRegex = timer.windowRegex && typeof timer.windowRegex === 'string' && timer.windowRegex.trim();
+        const hasWorkspace = isWorkspaceId(timer.workspaceId);
+        const hasRegex = isNonEmptyString(timer.windowRegex);
 
         // No conditions assigned - timer is manual only
         if (!hasWorkspace && !hasRegex) {
@@ -1521,11 +1525,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _openSettings() {
-        try {
-            this.extension.openPreferences();
-        } catch (err) {
-            console.log(`Error: Failed to open settings: ${err.message}`);
-        }
+        this.extension.openPreferences();
     }
 
     destroy() {
