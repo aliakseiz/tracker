@@ -19,23 +19,23 @@ Features:
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-02.png)
 
-1 - timer selector (to count the time instead of the total)
-2 - timer name (editable)
-3 - workspace indicator (optional, shows the associated workspace number)
-4 - window title regex indicator (optional, indicates that the timer has a regex pattern)
-5 - timer time (editable)
-6 - expand button to access timer actions
-7 - pause timer
-8 - reset timer time
-9 - edit timer name and time
-10 - delete timer
-11 - select "total time"
-12 - total time label
-13 - export
-14 - pause all
-15 - reset all
-16 - add new timer
-17 - open extension settings
+1. Timer selector (to count the time instead of the total)
+2. Timer name (editable)
+3. Workspace indicator (optional, shows the associated workspace number)
+4. Window title regex indicator (optional, indicates that the timer has a regex pattern)
+5. Timer time (editable)
+6. Expand button to access timer actions
+7. Pause timer
+8. Reset timer time
+9. Edit timer name and time
+10. Delete timer
+11. Select "total time"
+12. Total time label
+13. Export
+14. Pause all
+15. Reset all
+16. Add new timer
+17. Open extension settings
 
 ## Automatic Timer Control
 
