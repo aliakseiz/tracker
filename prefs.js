@@ -19,6 +19,10 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         const timersPage = this._createTimersPage(settings);
         window.add(timersPage);
 
+        // Create and add the Appearance page
+        const appearancePage = this._createAppearancePage(settings);
+        window.add(appearancePage);
+
         // Store settings reference for timer updates
         this._settings = settings;
         this._timersPage = timersPage;
@@ -137,6 +141,31 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
 
         // Load and display timers
         this._populateTimersGroup(group, settings);
+
+        return page;
+    }
+
+    _createAppearancePage(settings) {
+        const page = new Adw.PreferencesPage({
+            title: 'Appearance', icon_name: 'folder-pictures-symbolic',
+        });
+
+        const group = new Adw.PreferencesGroup({
+            title: 'Text Color',
+            description: 'Color for active (running) timers',
+        });
+        page.add(group);
+
+        const hexRow = new Adw.EntryRow({
+            title: 'HEX Color (e.g., #FF0000)',
+            text: settings.get_string('text-color'),
+        });
+        hexRow.set_input_purpose(Gtk.InputPurpose.PLAIN);
+        hexRow.connect('changed', (entry) => {
+            const color = entry.text.trim();
+            settings.set_string('text-color', color);
+        });
+        group.add(hexRow);
 
         return page;
     }

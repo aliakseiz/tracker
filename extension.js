@@ -62,6 +62,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         this.extension = extension;
         this._settings = this.extension.getSettings();
+        this._textColor = this._settings.get_string('text-color');
 
         this._timerUIElements = new Map();
         this._isInternalChange = false;
@@ -69,6 +70,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._loadTimers();
 
         this._buildMenu();
+
+        // Listen for text color changes to update active timers
+        this._textColorChangedHandler = this._settings.connect('changed::text-color', () => {
+            this._textColor = this._settings.get_string('text-color');
+            this._updateActiveTimerColors();
+        });
 
         this.menu.connect('menu-closed', () => {
             this._onMenuClosed();
@@ -671,6 +678,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 // Update icon to "Play"
                 playPauseIcon.icon_name = 'media-playback-start-symbolic';
                 timerMainRow.add_style_class_name('timer-paused');
+                this._removeColorFromTimer(timer);
             } else {
                 // Start timer - simple toggle, no condition checking
                 timer.running = true;
@@ -685,6 +693,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 // Update icon to "Pause"
                 playPauseIcon.icon_name = 'media-playback-pause-symbolic';
                 timerMainRow.remove_style_class_name('timer-paused');
+                this._applyColorToTimer(timer);
             }
             this._saveTimers();
         };
@@ -779,6 +788,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Show the actions row instantly
         actionsRow.visible = true;
         actionsRow.opacity = 255;
+
+        if (timer.running) {
+            this._applyColorToTimer(timer);
+        }
     }
 
     _collapseTimer(timer, uiElements) {
@@ -789,6 +802,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         // Hide the actions row instantly
         actionsRow.opacity = 0;
         actionsRow.visible = false;
+
+        if (timer.running) {
+            this._removeColorFromTimer(timer);
+        }
     }
 
     _resetTimer(timer) {
@@ -1143,8 +1160,10 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                         timer.lastUpdateTime = currentTime;
                     }
                     uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
+                    this._applyColorToTimer(timer);
                 } else {
                     uiElements.timeLabel.text = this._formatTime(timer.timeElapsed);
+                    this._removeColorFromTimer(timer);
                 }
 
             });
@@ -1173,6 +1192,38 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._totalTimeLabel.text = `Total: ${this._formatTime(totalTime)}`;
     }
 
+    _updateActiveTimerColors() {
+        this._timers.forEach(timer => {
+            if (timer.running) {
+                this._applyColorToTimer(timer);
+            } else {
+                this._removeColorFromTimer(timer);
+            }
+        });
+    }
+
+    _applyColorToTimer(timer) {
+        const uiElements = this._timerUIElements.get(timer.id);
+
+        uiElements.nameLabel.style = `color: ${this._textColor};`;
+        uiElements.timeLabel.style = `color: ${this._textColor};`;
+
+        if (uiElements.workspaceBadge) uiElements.workspaceBadge.style = `color: ${this._textColor};`;
+
+        if (uiElements.regexBadge) uiElements.regexBadge.style = `color: ${this._textColor};`;
+    }
+
+    _removeColorFromTimer(timer) {
+        const uiElements = this._timerUIElements.get(timer.id);
+
+        uiElements.nameLabel.style = '';
+        uiElements.timeLabel.style = '';
+
+        if (uiElements.workspaceBadge) uiElements.workspaceBadge.style = '';
+
+        if (uiElements.regexBadge) uiElements.regexBadge.style = '';
+    }
+
     _onMenuClosed() {
         this._timers.forEach(timer => {
             if (timer.isEditing) {
@@ -1193,6 +1244,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             x_align: Clutter.ActorAlign.END,
             style_class: 'timer-workspace-badge',
             reactive: true,
+            style: `color: ${this._textColor};`,
         });
     }
 
@@ -1203,6 +1255,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         return new St.Icon({
             icon_name: 'window-new-symbolic', style_class: 'timer-regex-badge', y_align: Clutter.ActorAlign.CENTER,
+            style: `color: ${this._textColor};`,
         });
     }
 

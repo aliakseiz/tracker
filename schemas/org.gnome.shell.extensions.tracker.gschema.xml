@@ -26,5 +26,10 @@
             <summary>Backup filename format</summary>
             <description>Filename format for backup files with timestamp placeholders.</description>
         </key>
+        <key name="text-color" type="s">
+            <default>"#ffffff"</default>
+            <summary>Active timer text color</summary>
+            <description>Color for active (running) timers. Format: #RRGGBB</description>
+        </key>
     </schema>
 </schemalist>
