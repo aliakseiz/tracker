@@ -63,6 +63,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this.extension = extension;
         this._settings = this.extension.getSettings();
         this._textColor = this._settings.get_string('text-color');
+        this._panelTimerColor = this._settings.get_string('panel-timer-color');
 
         this._timerUIElements = new Map();
         this._isInternalChange = false;
@@ -75,6 +76,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._textColorChangedHandler = this._settings.connect('changed::text-color', () => {
             this._textColor = this._settings.get_string('text-color');
             this._updateActiveTimerColors();
+        });
+
+        // Listen for panel timer color changes
+        this._panelTimerColorChangedHandler = this._settings.connect('changed::panel-timer-color', () => {
+            this._panelTimerColor = this._settings.get_string('panel-timer-color');
+            this._updatePanelLabelColor();
         });
 
         this.menu.connect('menu-closed', () => {
@@ -848,6 +855,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             uiElements.item.add_style_class_name('timer-paused');
         }
 
+        this._updatePanelLabelColor();
         this._saveTimers();
     }
 
@@ -1035,6 +1043,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Update the panel label and save timers
         this._updatePanelLabel();
+        this._updatePanelLabelColor();
         this._saveTimers();
     }
 
@@ -1091,6 +1100,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 console.log(`Warning: UI elements not found for timer "${timer.name}"`);
             }
         });
+        this._updatePanelLabelColor();
         this._saveTimers();
     }
 
@@ -1169,6 +1179,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             });
             this._updateTotalTime();
             this._updatePanelLabel();
+            this._updatePanelLabelColor();
 
             return GLib.SOURCE_CONTINUE;
         });
@@ -1184,12 +1195,22 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
     }
 
     _updateTotalTime() {
-        let totalTime = 0;
+        let totalTime;
         let currentTime = GLib.get_real_time();
         totalTime = this._timers.reduce((sum, timer) => {
             return sum + this._getTimerTotalTime(timer, currentTime);
         }, 0);
         this._totalTimeLabel.text = `Total: ${this._formatTime(totalTime)}`;
+    }
+
+    _updatePanelLabelColor() {
+        const hasRunningTimer = this._timers.some(timer => timer.running);
+
+        if (hasRunningTimer && this._panelTimerColor) {
+            this._label.style = `color: ${this._panelTimerColor};`;
+        } else {
+            this._label.style = '';
+        }
     }
 
     _updateActiveTimerColors() {
@@ -1574,6 +1595,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
             }
         });
 
+        this._updatePanelLabelColor();
         this._saveTimers();
     }
 

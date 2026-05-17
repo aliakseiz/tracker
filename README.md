@@ -16,6 +16,7 @@ Features:
 - Reset individual timers or all of them at once
 - Selection: choose specific timers or display the total time
 - Edit name and time
+- Set colors for active timers and total time in the panel
 
 ![demo](https://raw.githubusercontent.com/aliakseiz/tracker/main/demo-02.png)
 

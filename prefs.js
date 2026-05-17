@@ -27,6 +27,7 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         this._settings = settings;
         this._timersPage = timersPage;
         this._timerGroup = this._getTimerGroupFromPage(timersPage);
+        this._appearancePage = appearancePage;
 
         // Listen for timer changes to update the UI
         this._timerChangedHandler = settings.connect('changed::timers', () => {
@@ -151,21 +152,32 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         });
 
         const group = new Adw.PreferencesGroup({
-            title: 'Text Color',
-            description: 'Color for active (running) timers',
+            title: 'Timer colors', description: 'Colors for active timers and panel label',
         });
         page.add(group);
 
-        const hexRow = new Adw.EntryRow({
-            title: 'HEX Color (e.g., #FF0000)',
+        const textColorRow = new Adw.EntryRow({
+            title: 'Active timers',
             text: settings.get_string('text-color'),
         });
-        hexRow.set_input_purpose(Gtk.InputPurpose.PLAIN);
-        hexRow.connect('changed', (entry) => {
+        textColorRow.set_input_purpose(Gtk.InputPurpose.PLAIN);
+        textColorRow.connect('changed', (entry) => {
             const color = entry.text.trim();
             settings.set_string('text-color', color);
         });
-        group.add(hexRow);
+        group.add(textColorRow);
+
+        // Panel timer color
+        const panelColorRow = new Adw.EntryRow({
+            title: 'Total in panel (when timers active)',
+            text: settings.get_string('panel-timer-color'),
+        });
+        panelColorRow.set_input_purpose(Gtk.InputPurpose.PLAIN);
+        panelColorRow.connect('changed', (entry) => {
+            const color = entry.text.trim();
+            settings.set_string('panel-timer-color', color);
+        });
+        group.add(panelColorRow);
 
         return page;
     }

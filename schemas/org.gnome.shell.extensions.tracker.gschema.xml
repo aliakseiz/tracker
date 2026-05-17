@@ -31,5 +31,10 @@
             <summary>Active timer text color</summary>
             <description>Color for active (running) timers. Format: #RRGGBB</description>
         </key>
+        <key name="panel-timer-color" type="s">
+            <default>""</default>
+            <summary>Panel timer label color</summary>
+            <description>Color for the total time label. Format: #RRGGBB</description>
+        </key>
     </schema>
 </schemalist>
