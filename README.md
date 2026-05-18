@@ -75,6 +75,12 @@ The extension now supports automatic backup functionality:
 
 Backup files are saved in CSV format with headers "Name" and "Time".
 
+## Appearance Customization
+
+![appearance](https://raw.githubusercontent.com/aliakseiz/tracker/main/appearance-01.png)
+
+Override the default colors for active timers and total time in the panel (when at least one timer is active).
+
 # Install
 
 [Gnome shell extensions](https://extensions.gnome.org/extension/7447/tracker/)
