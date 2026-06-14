@@ -691,11 +691,8 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
 
-                // Set autoResume based on whether timer has conditions assigned
-                const hasWorkspace = isWorkspaceId(timer.workspaceId);
-                const hasRegex = isNonEmptyString(timer.windowRegex);
-
-                timer.autoResume = hasWorkspace || hasRegex;
+                // Set autoResume for all manually started timers
+                timer.autoResume = true;
 
                 // Update icon to "Pause"
                 playPauseIcon.icon_name = 'media-playback-pause-symbolic';
@@ -1440,7 +1437,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // No conditions assigned - timer is manual only
         if (!hasWorkspace && !hasRegex) {
-            return null; // null means "don't auto-control"
+            return true; // timer with manual control, only autoResume decides
         }
 
         let workspaceMatches = true;
