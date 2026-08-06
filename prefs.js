@@ -143,6 +143,24 @@ export default class TrackerExtensionPreferences extends ExtensionPreferences {
         // Load and display timers
         this._populateTimersGroup(group, settings);
 
+        // General settings group
+        const generalGroup = new Adw.PreferencesGroup({
+            title: 'General Settings',
+        });
+        const autoResumeRow = new Adw.ActionRow({
+            title: 'Automatically Resume Timers',
+        });
+        autoResumeRow.subtitle = 'Resume timers automatically when conditions match, even if manually paused';
+        const autoResumeSwitch = new Gtk.Switch({
+            active: settings.get_boolean('auto-resume'), valign: Gtk.Align.CENTER,
+        });
+        autoResumeSwitch.connect('notify::active', (switch_) => {
+            settings.set_boolean('auto-resume', switch_.active);
+        });
+        autoResumeRow.add_suffix(autoResumeSwitch);
+        generalGroup.add(autoResumeRow);
+        page.add(generalGroup);
+
         return page;
     }
 

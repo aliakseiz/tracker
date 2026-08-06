@@ -36,5 +36,10 @@
             <summary>Panel timer label color</summary>
             <description>Color for the total time label. Format: #RRGGBB</description>
         </key>
+        <key name="auto-resume" type="b">
+            <default>false</default>
+            <summary>Automatically resume timers</summary>
+            <description>Whether to automatically resume timers when workspace or window conditions match, even if manually paused.</description>
+        </key>
     </schema>
 </schemalist>
