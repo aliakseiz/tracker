@@ -53,6 +53,8 @@ To initiate the automatic control, start the timer first.
 
 If the timer is paused manually, the extension will not automatically resume it when the workspace or window title changes.
 
+Automatic resuming can be disabled entirely via the "Automatically Resume Timers" toggle on the Timers settings page. Auto-paused timers stay paused until started manually.
+
 ## Backup Configuration
 
 The extension now supports automatic backup functionality:

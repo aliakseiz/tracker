@@ -64,6 +64,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._settings = this.extension.getSettings();
         this._textColor = this._settings.get_string('text-color');
         this._panelTimerColor = this._settings.get_string('panel-timer-color');
+        this._autoResumeEnabled = this._settings.get_boolean('auto-resume');
 
         this._timerUIElements = new Map();
         this._isInternalChange = false;
@@ -82,6 +83,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         this._panelTimerColorChangedHandler = this._settings.connect('changed::panel-timer-color', () => {
             this._panelTimerColor = this._settings.get_string('panel-timer-color');
             this._updatePanelLabelColor();
+        });
+
+        // Listen for auto-resume setting changes
+        this._autoResumeChangedHandler = this._settings.connect('changed::auto-resume', () => {
+            this._autoResumeEnabled = this._settings.get_boolean('auto-resume');
+            this._syncTimers();
         });
 
         this.menu.connect('menu-closed', () => {
@@ -1579,7 +1586,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                 }
             }
             // Auto-resume timer if conditions match and it was auto-paused
-            else if (!timer.running && shouldRun && timer.autoResume) {
+            else if (!timer.running && shouldRun && timer.autoResume && this._autoResumeEnabled) {
                 timer.running = true;
                 timer.lastUpdateTime = currentTime;
 
@@ -1638,6 +1645,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         if (this._timerSettingsChangedHandler) {
             this._settings.disconnect(this._timerSettingsChangedHandler);
             this._timerSettingsChangedHandler = null;
+        }
+
+        // Auto-resume setting change handler
+        if (this._autoResumeChangedHandler) {
+            this._settings.disconnect(this._autoResumeChangedHandler);
+            this._autoResumeChangedHandler = null;
         }
 
         // Clean up settings
