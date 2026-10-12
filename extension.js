@@ -986,6 +986,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         saveButton.connect('clicked', saveTimer);
         cancelButton.connect('clicked', cancelEdit);
 
+        // Save when Enter is pressed in either entry.
+        for (const entry of [nameEntry, timeEntry]) {
+            entry.clutter_text.set_activatable(true);
+            entry.clutter_text.connect('activate', saveTimer);
+        }
+
         // Handle key events for both entries
         const handleKeyPress = (entry, nextEntry, previousEntry) => {
             entry.clutter_text.connect('key-press-event', (actor, event) => {
@@ -996,9 +1002,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                     cancelEdit();
                     // Prevent the menu from closing
                     return true; // Return true to stop event propagation
-                } else if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
-                    saveTimer();
-                    return true;
                 } else if (symbol === Clutter.KEY_Tab || symbol === Clutter.KEY_ISO_Left_Tab) {
                     let shiftPressed = state & Clutter.ModifierType.SHIFT_MASK;
                     if (shiftPressed || symbol === Clutter.KEY_ISO_Left_Tab) {
