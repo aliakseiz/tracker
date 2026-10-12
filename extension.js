@@ -427,17 +427,17 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
 
         let summaryWrapper = new St.BoxLayout({
-            vertical: false, x_expand: true, style_class: 'summary-wrapper',
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true, style_class: 'summary-wrapper',
         });
 
         // Left container for the total time eye button and label
         let leftContainer = new St.BoxLayout({
-            vertical: false, x_expand: true, style_class: 'left-container', y_align: Clutter.ActorAlign.CENTER,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true, style_class: 'left-container', y_align: Clutter.ActorAlign.CENTER,
         });
 
         // Right container for the action buttons
         let rightContainer = new St.BoxLayout({
-            vertical: false, x_expand: false, style_class: 'right-container', y_align: Clutter.ActorAlign.CENTER,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: false, style_class: 'right-container', y_align: Clutter.ActorAlign.CENTER,
         });
 
         // Total time eye button
@@ -622,12 +622,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Vertical container for both rows (main + actions)
         let timerVerticalContainer = new St.BoxLayout({
-            vertical: true, x_expand: true,
+            orientation: Clutter.Orientation.VERTICAL, x_expand: true,
         });
 
         // Main row
         let timerMainContent = new St.BoxLayout({
-            vertical: false, x_expand: true, reactive: true, can_focus: true,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true, reactive: true, can_focus: true,
         });
 
         // Add directly to main row
@@ -635,7 +635,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Expandable container
         let expandableContainer = new St.BoxLayout({
-            vertical: false, x_expand: true,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true,
         });
 
         expandableContainer.add_child(nameLabel);
@@ -653,7 +653,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Second row, action buttons
         let timerActionsRow = new St.BoxLayout({
-            vertical: false,
+            orientation: Clutter.Orientation.HORIZONTAL,
             style_class: 'timer-actions-row',
             x_align: Clutter.ActorAlign.CENTER,
             visible: timer.expanded,
