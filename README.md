@@ -87,6 +87,11 @@ Override the default colors for active timers and total time in the panel (when 
 
 [Gnome shell extensions](https://extensions.gnome.org/extension/7447/tracker/)
 
+
+# Contributors
+
+- [dvdzmr](https://github.com/dvdzmr) fixed keypress processing and support of Gnome 51 ([PR](https://github.com/aliakseiz/tracker/pull/10))
+
 ---
 
 # License
