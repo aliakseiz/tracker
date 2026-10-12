@@ -427,17 +427,17 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         });
 
         let summaryWrapper = new St.BoxLayout({
-            vertical: false, x_expand: true, style_class: 'summary-wrapper',
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true, style_class: 'summary-wrapper',
         });
 
         // Left container for the total time eye button and label
         let leftContainer = new St.BoxLayout({
-            vertical: false, x_expand: true, style_class: 'left-container', y_align: Clutter.ActorAlign.CENTER,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true, style_class: 'left-container', y_align: Clutter.ActorAlign.CENTER,
         });
 
         // Right container for the action buttons
         let rightContainer = new St.BoxLayout({
-            vertical: false, x_expand: false, style_class: 'right-container', y_align: Clutter.ActorAlign.CENTER,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: false, style_class: 'right-container', y_align: Clutter.ActorAlign.CENTER,
         });
 
         // Total time eye button
@@ -622,12 +622,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Vertical container for both rows (main + actions)
         let timerVerticalContainer = new St.BoxLayout({
-            vertical: true, x_expand: true,
+            orientation: Clutter.Orientation.VERTICAL, x_expand: true,
         });
 
         // Main row
         let timerMainContent = new St.BoxLayout({
-            vertical: false, x_expand: true, reactive: true, can_focus: true,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true, reactive: true, can_focus: true,
         });
 
         // Add directly to main row
@@ -635,7 +635,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Expandable container
         let expandableContainer = new St.BoxLayout({
-            vertical: false, x_expand: true,
+            orientation: Clutter.Orientation.HORIZONTAL, x_expand: true,
         });
 
         expandableContainer.add_child(nameLabel);
@@ -653,7 +653,7 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
 
         // Second row, action buttons
         let timerActionsRow = new St.BoxLayout({
-            vertical: false,
+            orientation: Clutter.Orientation.HORIZONTAL,
             style_class: 'timer-actions-row',
             x_align: Clutter.ActorAlign.CENTER,
             visible: timer.expanded,
@@ -986,6 +986,12 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
         saveButton.connect('clicked', saveTimer);
         cancelButton.connect('clicked', cancelEdit);
 
+        // Save when Enter is pressed in either entry.
+        for (const entry of [nameEntry, timeEntry]) {
+            entry.clutter_text.set_activatable(true);
+            entry.clutter_text.connect('activate', saveTimer);
+        }
+
         // Handle key events for both entries
         const handleKeyPress = (entry, nextEntry, previousEntry) => {
             entry.clutter_text.connect('key-press-event', (actor, event) => {
@@ -996,9 +1002,6 @@ const Tracker = GObject.registerClass(class Tracker extends PanelMenu.Button {
                     cancelEdit();
                     // Prevent the menu from closing
                     return true; // Return true to stop event propagation
-                } else if (symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) {
-                    saveTimer();
-                    return true;
                 } else if (symbol === Clutter.KEY_Tab || symbol === Clutter.KEY_ISO_Left_Tab) {
                     let shiftPressed = state & Clutter.ModifierType.SHIFT_MASK;
                     if (shiftPressed || symbol === Clutter.KEY_ISO_Left_Tab) {
